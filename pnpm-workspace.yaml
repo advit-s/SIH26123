@@ -1,3 +1,6 @@
 packages:
   - "apps/web"
   - "packages/contracts"
+allowBuilds:
+  '@tailwindcss/oxide': true
+  esbuild: true

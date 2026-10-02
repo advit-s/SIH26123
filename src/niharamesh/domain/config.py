@@ -146,9 +146,7 @@ class SensorModel(_Frozen):
     configuration, labelled as such wherever it is displayed."""
 
     range_m: Annotated[float, Field(gt=0.1, le=100.0, allow_inf_nan=False)] = 3.0
-    field_of_view_rad: Annotated[float, Field(gt=0.1, le=2.0 * 3.14159, allow_inf_nan=False)] = (
-        4.712
-    )
+    field_of_view_rad: Annotated[float, Field(gt=0.1, le=2.0 * 3.14159, allow_inf_nan=False)] = 4.712
     angular_resolution_rad: Annotated[float, Field(gt=0.001, le=0.5, allow_inf_nan=False)] = 0.0436
     observation_latency_s: Annotated[float, Field(ge=0.0, le=10.0, allow_inf_nan=False)] = 0.1
     position_sigma_m: Annotated[float, Field(ge=0.0, le=1.0, allow_inf_nan=False)] = 0.02
@@ -205,7 +203,13 @@ class SimulationConfig(_Frozen):
     stopping: StoppingBudget = StoppingBudget()
     protocol: ProtocolTiming = ProtocolTiming()
     features: FeatureFlags = FeatureFlags()
-    #: Physical actuation is disabled by default, always.
+    #: The declared actuator model integrates accepted commands. This is a
+    #: *physics* switch: with it off, the simulated chain is dead and the
+    #: laboratory cannot demonstrate anything.
+    simulated_actuation_enabled: bool = True
+    #: Physical actuation is disabled by default, always. This is a *hardware
+    #: boundary* switch and means something entirely different from the field
+    #: above; see :attr:`actuator_chain_live`.
     physical_actuation_enabled: bool = False
 
     @model_validator(mode="after")
@@ -215,6 +219,27 @@ class SimulationConfig(_Frozen):
         if self.physical_actuation_enabled and not self.features.physical_actuation_permitted():
             raise ValueError("physical actuation cannot be enabled with an unsafe research flag")
         return self
+
+    @property
+    def actuator_chain_live(self) -> bool:
+        """True when the declared actuator model integrates accepted commands.
+
+        This is the *only* question the simulator is allowed to ask. It is the
+        disjunction of two switches that answer different questions and must never
+        be conflated again:
+
+        * :attr:`simulated_actuation_enabled` - may this command integrate against
+          the declared actuator model? A physics question. ``True`` in the
+          laboratory, or nothing can move and nothing can be demonstrated.
+        * :attr:`physical_actuation_enabled` - may this command energise a real
+          drive train? A hardware-boundary question. ``False`` here, forever,
+          unless a human opts in.
+
+        Conflating them once made the world refuse every command and the safety
+        gate veto every tick with ``actuation_disabled``, so no robot could ever
+        start.
+        """
+        return self.simulated_actuation_enabled or self.physical_actuation_enabled
 
     @property
     def dt_s(self) -> float:

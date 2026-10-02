@@ -32,6 +32,25 @@ The world owns exactly one clock: ``sim_time_ns`` in the ``LOGICAL`` domain. A
 ``MONOTONIC`` is refused rather than compared against a value it cannot legally be
 compared to. Sensor latency is modelled by carrying two timestamps, never by
 subtracting across domains.
+
+Two actuation switches, never one
+---------------------------------
+:meth:`World.apply_command` refuses a command only when
+``SimulationConfig.actuator_chain_live`` is false. That property is the
+disjunction of two fields that answer *different* questions and must not be
+conflated:
+
+* ``simulated_actuation_enabled`` (default ``True``) - a physics question. May
+  this command integrate against the declared actuator model? With it off the
+  laboratory cannot demonstrate anything.
+* ``physical_actuation_enabled`` (default ``False``) - a hardware-boundary
+  question. May this command energise a real drive train? It stays off here
+  unless a human opts in, and opting in still refuses every unsafe research
+  ablation at construction time.
+
+Reading the hardware switch here once made this world refuse *every* command in
+its default configuration, which reported every tick as
+``ACTUATOR_FAULT`` / ``actuation_disabled`` and left the whole fleet stationary.
 """
 
 from __future__ import annotations
@@ -97,6 +116,11 @@ class _RobotState:
     stop_reason: StopReason = StopReason.NONE
     command: MotionCommand | None = None
     command_seq: int = 0
+    #: This robot's own drive-train chain is live and will accept commands.
+    #: Seeded at reset from ``config.actuator_chain_live`` rather than from the
+    #: first accepted command: the safety gate's first check reads exactly this
+    #: field, so a chain reported dead until the first command would veto that
+    #: first command and no robot could ever start.
     actuation_enabled: bool = False
     battery_c: float = 1.0
     carrying: str | None = None
@@ -169,7 +193,7 @@ class World:
             self._robots[identity.robot_id] = _RobotState(
                 identity=identity,
                 pose=Pose(start.pose.x, start.pose.y, start.pose.theta),
-                actuation_enabled=self._config.physical_actuation_enabled,
+                actuation_enabled=self._config.actuator_chain_live,
                 battery_c=self._config.battery.start_fraction,
                 carrying=start.holding_task_id,
             )
@@ -185,7 +209,11 @@ class World:
         * the command declares a clock domain other than the world's,
         * the command sequence is not newer than the one already held (a replayed
           or reordered command is not a new instruction), or
-        * physical actuation is disabled, which is the default.
+        * :attr:`~niharamesh.domain.config.SimulationConfig.actuator_chain_live`
+          is ``False``, i.e. neither the *simulated* actuator chain nor the
+          *physical* one is live. The default laboratory configuration leaves
+          the simulated chain live and only the physical opt-in off, so this
+          refusal is not the default outcome.
 
         It is **never** refused because the resulting motion would collide, would
         leave the map, or would enter a zone. Those outcomes are applied and then
@@ -200,7 +228,7 @@ class World:
             return False
         if command.command_seq <= state.command_seq:
             return False
-        if not self._config.physical_actuation_enabled:
+        if not self._config.actuator_chain_live:
             return False
 
         state.command = command
@@ -475,9 +503,7 @@ class World:
             if other_id == robot_id:
                 continue
             other = self._robots[other_id]
-            bodies.extend(
-                _occupied_bodies(other.identity.footprint, other.pose, other.carrying)
-            )
+            bodies.extend(_occupied_bodies(other.identity.footprint, other.pose, other.carrying))
         return SensorScene(map=self._sensor_map(), other_bodies=tuple(bodies))
 
     def _finish_service(self, robot_id: str) -> None:
@@ -533,9 +559,7 @@ class World:
                 self.remove_obstacle(spec.fault_id)
 
 
-def _occupied_bodies(
-    footprint: Footprint, pose: Pose, carrying: str | None
-) -> tuple[OrientedBox, ...]:
+def _occupied_bodies(footprint: Footprint, pose: Pose, carrying: str | None) -> tuple[OrientedBox, ...]:
     """Chassis alone when empty-handed, chassis plus load when carrying.
 
     ``Footprint.occupied_boxes`` reports the payload whenever the footprint

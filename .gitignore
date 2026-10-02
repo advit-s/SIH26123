@@ -29,7 +29,7 @@ htmlcov/
 # ---- Runtime data (generated, regenerable) ----
 var/
 !var/.gitkeep
-runs/
+/runs/
 benchmarks/out/
 evidence/traces/
 evidence/screenshots/

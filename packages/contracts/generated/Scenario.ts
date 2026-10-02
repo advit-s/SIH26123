@@ -180,6 +180,7 @@ export type ObservationLatencyS = number;
 export type PositionSigmaM = number;
 export type RangeM = number;
 export type RangeNoiseM = number;
+export type SimulatedActuationEnabled = boolean;
 export type StatePublishHz = number;
 export type BrakingDecelMps2 = number;
 export type ExtraMarginM = number;
@@ -411,6 +412,7 @@ export interface SimulationConfig {
   protocol?: ProtocolTiming;
   schema_version?: SchemaVersion4;
   sensor?: SensorModel;
+  simulated_actuation_enabled?: SimulatedActuationEnabled;
   state_publish_hz?: StatePublishHz;
   stopping?: StoppingBudget;
 }

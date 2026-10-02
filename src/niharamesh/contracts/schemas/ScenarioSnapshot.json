@@ -1037,6 +1037,7 @@
               "range_m": 3.0,
               "range_noise_m": 0.02
             },
+            "simulated_actuation_enabled": true,
             "state_publish_hz": 10,
             "stopping": {
               "braking_decel_mps2": 0.8,
@@ -1218,6 +1219,11 @@
             "range_m": 3.0,
             "range_noise_m": 0.02
           }
+        },
+        "simulated_actuation_enabled": {
+          "default": true,
+          "title": "Simulated Actuation Enabled",
+          "type": "boolean"
         },
         "state_publish_hz": {
           "default": 10,

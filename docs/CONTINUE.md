@@ -11,36 +11,57 @@ what is honestly unproven.
 
 ## Where the build stands
 
-Phases 0–1 are complete and committed. Phases 2–4 were delegated to parallel
-subagents with non-overlapping file ownership and are landing. The integration
-layer (CLI, run orchestration, docs, tooling) is being built by the integration
-owner.
+Core workstreams and cockpit have landed. Git currently has 12 commits, ending
+at `505629a`. End-to-end task completion, API, replay and benchmarks are still
+incomplete. Use `docs/STATUS.md` for the distinction between prior workstream
+reports and checks executed during the latest relay repair.
 
-### Committed
+### Latest local changes (not committed)
 
-| Commit | Contents |
-|---|---|
-| `f9cb92a` | Repo bootstrap, `opencode.jsonc` (v2 schema), 10 invariants, domain contracts, 55 JSON Schemas |
-| `816ccc5` | Scenario library (7 named scenarios), validation, path-safe IO, clocks, ports, CLI, research register |
+- Added `_drain_outboxes` to `src/niharamesh/runs/harness.py`, called before inbox
+  delivery every physics tick. It drains **`agent.coordinator.outbox`**; there is
+  no `requester.outbox`. Do not follow the previous handoff's wrong-queue advice.
+- Added `tests/integration/test_harness_relay.py`: real three-agent grant
+  acquisition, durable cancellation and peer acknowledgements. Both tests failed
+  before the repair and pass afterwards. Independent read-only review passed.
+- Narrowed `.gitignore` from `runs/` to `/runs/`. The old pattern accidentally hid
+  both existing `src/niharamesh/runs/*.py` files from Git, despite the earlier
+  commit title claiming a harness. They are now visible as untracked source;
+  include both in a future integration commit. Leave the original build prompt
+  uncommitted as requested.
+- Updated this file and `docs/STATUS.md` with actual scenario outcomes and the
+  additional runtime blockers.
 
-### In flight (uncommitted, owned by subagents — do not edit)
+### Ownership rule
 
-| Area | Files | Owner |
-|---|---|---|
-| simulator + collision | `src/niharamesh/simulator/**`, `src/niharamesh/safety/**`, `tests/unit/test_{collision,oracle_agreement,kinematics,sensors,world}.py`, `tests/property/test_motion_properties.py` | simulation workstream |
-| coordination | `src/niharamesh/coordination/**`, `docs/protocol/**`, `docs/adr/000{2,3}-*`, `tests/protocol/**` | coordination workstream |
-| planning + allocation | `src/niharamesh/planning/**`, `src/niharamesh/allocation/**`, `tests/unit/test_{planner,path_smoothing,blocked_reroute,auction,custody,temporal_planner}.py`, `tests/property/test_allocation_properties.py` | planning workstream |
-| transport + persistence | `src/niharamesh/transport/**`, `src/niharamesh/persistence/**`, `src/niharamesh/telemetry/**`, `tests/unit/test_{framing,codec,fault_layer,journal,eventstore}.py`, `tests/network/**` | transport workstream |
-| web cockpit | `apps/web/**`, `e2e/**`, `playwright.config.ts`, `packages/contracts/generated/**` | frontend workstream |
+No implementation subagent is currently in flight from this repair. One subagent
+performed read-only protocol and diff review; the integration owner made all edits.
+Before any new delegation, assign non-overlapping file ownership.
+**Do not edit files while their owning subagent is running.** Earlier concurrent
+edits to `safety/collision.py` lost work. Only the integration owner stages or commits.
 
-**Do not edit files in these areas while their subagent is running.** Doing so
-causes lost work — this happened once already when `safety/collision.py` was
-overwritten mid-review.
+### Exact next engineering step
+
+Start with regression tests for the simulated-actuation and agent/gate boundary.
+All three 60-second checks (`three-way-junction`, `headon-aisle`,
+`infeasible-layout`) still ended `incomplete`, with zero task completions and
+every command vetoed as `actuator_fault`. The junction requester now holds all
+three grants, so the transport blockage is resolved.
+
+`World` copies `physical_actuation_enabled=False` into observations and rejects
+commands. Separate simulated motion from physical actuation deliberately; do not
+enable hardware globally to obtain a green demo. Then test and fix the ignored
+agent decision, incorrect zone context, missing protocol safety callback and
+veto timestamp accounting before wiring service, custody, entry and safe release.
+The full list and code boundaries are in `docs/STATUS.md`.
+
+Runtime grant exchange now works; successful task completion and the diagnostic
+safe-stop outcome have **not** been observed. The 20% target remains unmeasured.
 
 ### Integration owner's remaining work
 
-1. `src/niharamesh/agent/**` — the per-robot runtime tying planner + allocator +
-   coordinator + safety gate together. **Blocked** until the four workstreams land.
+1. `src/niharamesh/agent/**` — finish runtime integration after the safety-boundary
+   regression tests above. Core subsystems have landed; their integration is incomplete.
 2. `src/niharamesh/api/**` — FastAPI app, WebSocket stream, command plane.
    Partially specified; the frontend is coding against the agreed contract.
 3. `src/niharamesh/evaluation/**` — metrics, eligibility, gaps, paired analysis.
@@ -70,6 +91,9 @@ uv run mypy
 pnpm --filter @niharamesh/web exec tsc --noEmit
 
 # tests
+.\.venv\Scripts\python.exe -m pytest tests/integration/test_harness_relay.py -q -p no:cacheprovider
+# Latest focused check: 2 passed. Full Python suite: 426 passed.
+# Existing venv bypasses sandbox-denied uv cache; cacheprovider also disabled.
 uv run pytest tests/unit -q
 uv run pytest tests/protocol -q
 uv run pytest tests/property -q
@@ -82,12 +106,14 @@ uv run nihara scenarios export
 uv run nihara scenarios validate --structural-only
 uv run nihara doctor
 
-# run + evidence
+# Future run + evidence commands (CLI runtime is not implemented yet)
 uv run nihara run --scenario scenarios/three-way-junction.r1.json --mode deterministic
 uv run nihara benchmark --suite scenarios/suites/smoke.json --output var/benchmarks/smoke
 ```
 
-Full release path: `pnpm verify`.
+Intended full release path: `pnpm verify`; this repair did not establish release readiness.
+Generated 60-second scenario artifacts, including snapshots and manifests:
+`var/verification/harness-relay/{scenario-id}.json`.
 
 ---
 
@@ -210,8 +236,9 @@ and still refuses any escape.
 
 - **20 % target: unmeasured.** Report as achieved or not achieved from a paired run
   set. Never estimated.
-- Docker, ROS 2 and ARM edge hardware are **unavailable here**; those paths are
-  authored and reviewed but unexecuted, and must be labelled that way.
+- Docker, ROS 2 and ARM edge hardware are **unavailable here**; their integration
+  paths are not implemented or executed. Do not repeat earlier claims of authored
+  Compose files or verified ROS adapters without checking the actual files.
 - Protocol interleaving verification is **bounded**, not unbounded.
 - No learned component is shipped; the AI is search + constrained decisions +
   intent prediction + negotiation, described precisely.

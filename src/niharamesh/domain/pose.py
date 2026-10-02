@@ -114,9 +114,7 @@ class Footprint(_Frozen):
         if self.payload_length_m > 0.0 and self.payload_width_m <= 0.0:
             raise ValueError("payload_width_m must be positive when payload_length_m > 0")
         if self.payload_length_m > self.length_m + 0.001:
-            raise ValueError(
-                "payload_length_m exceeds chassis length; use payload_offset_m instead"
-            )
+            raise ValueError("payload_length_m exceeds chassis length; use payload_offset_m instead")
         return self
 
     @property
@@ -195,7 +193,16 @@ class MotionState(_Frozen):
     command_expires_at_ns: int | None = None
     actuator: ActuatorState = ActuatorState.DISABLED
     stop_reason: StopReason = StopReason.NONE
-    #: Physical actuation is disabled by default and must be explicitly enabled.
+    #: This robot's **own drive-train chain** is live and will accept commands.
+    #:
+    #: Not the fleet-wide hardware switch. ``SimulationConfig`` keeps two separate
+    #: switches -- ``simulated_actuation_enabled`` (a physics question: may this
+    #: command integrate against the declared actuator model) and
+    #: ``physical_actuation_enabled`` (a hardware-boundary question: may it energise
+    #: a real drive train) -- and this field reports the per-robot consequence of the
+    #: first. Reading it as "physical actuation" is what made the safety gate veto
+    #: every command at tick 0 with ``actuation_disabled`` and left the whole fleet
+    #: stationary in its default configuration.
     actuation_enabled: bool = False
 
     @model_validator(mode="after")

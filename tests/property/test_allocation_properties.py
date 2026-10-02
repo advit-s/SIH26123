@@ -430,20 +430,36 @@ def test_total_cost_is_monotonic_in_travel_time_s(
     # something the declared rounding does not deliver.
     assert high_cost >= low_cost
 
-    # Effective resolution of the announced total: the quantisation step, but never
-    # finer than one unit in the last place of the value itself. Rounding 1.34e8 to nine
-    # decimals is a no-op - the double cannot represent anything finer.
+    # The bound on how much quantisation can move a *difference* of two totals.
+    #
+    # A declared rounding cannot be honoured below the precision the value can
+    # actually represent, so the effective spacing of the announced total is
+    # ``scale = max(step, ulp)`` -- rounding 2.1e9 to seven decimals asks for a
+    # resolution the double does not have. Three contributions, each bounded by one
+    # ``scale``:
+    #
+    #   1. each total is rounded to the nearest grid point   -> error <= scale/2
+    #   2. so the *difference* of the two rounds              -> error <= scale
+    #   3. computing ``gap`` and ``high_cost - low_cost``     -> one rounding each
+    #
+    # An earlier version of this test compared the observed difference against
+    # ``2 x quantisation_step``, a bound that is simply unachievable. Hypothesis
+    # found the counterexamples twice: an exact gap of 0.01001 with a 0.01 step gave
+    # an observed difference of 0.020000000000004074 (4e-15 over), and an exact gap
+    # of 17.9597679708732 at magnitude 2.1e9 gave 6.3e-07 against a 5.8e-07 bound.
+    # Both excesses came from that formula, not from the cost model.
     step = 10.0**-model.quantise_decimals
-    resolution = max(step, math.ulp(max(abs(low_cost), abs(high_cost))))
+    scale = max(step, math.ulp(max(abs(low_cost), abs(high_cost), 1.0)))
     gap = (high - low) * model.weight_travel_time_s
-    if gap > 2.0 * resolution:
-        # A gap larger than twice the resolution must survive and show up strictly.
+    observed = high_cost - low_cost
+
+    # The announced difference must reproduce the exact gap to within the rounding.
+    assert abs(observed - gap) <= 3.0 * scale
+
+    if gap > 6.0 * scale:
+        # A gap well outside the rounding must survive and show up strictly.
         assert high_cost > low_cost
-        assert high_cost - low_cost >= resolution
-    else:
-        # Inside the band the two may be indistinguishable. That is the quantisation
-        # contract, not a violation - and the band is reported, not hidden.
-        assert abs(high_cost - low_cost) <= 2.0 * resolution
+        assert observed >= gap - 3.0 * scale
 
 
 @given(model=cost_models(), values=st.lists(travel_s, min_size=5, max_size=5))

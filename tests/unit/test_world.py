@@ -51,10 +51,12 @@ _DT = 1.0 / 20.0
 
 
 def _config(**overrides: object) -> SimulationConfig:
-    base = SimulationConfig(
-        physics_step_hz=20,
-        physical_actuation_enabled=True,
-    )
+    # The *default* configuration is used deliberately. It used to carry
+    # ``physical_actuation_enabled=True`` here purely so robots would move, which
+    # meant this file never exercised the shipped default and quietly opted into a
+    # hardware boundary it has no business opting into. With the two switches
+    # separated (contract A1) the default simulated chain is live on its own.
+    base = SimulationConfig(physics_step_hz=20)
     return base.model_copy(update=dict(overrides)) if overrides else base
 
 
@@ -251,12 +253,43 @@ def test_a_replayed_command_sequence_is_refused() -> None:
     assert world.apply_command(_command("r1", seq=6, linear=0.3)) is True
 
 
-def test_actuation_is_disabled_by_default_and_commands_are_refused() -> None:
-    """Physical actuation ships off. A disabled world must not move anything."""
+def test_physical_actuation_is_disabled_by_default_while_the_simulated_chain_lives() -> None:
+    """The two actuation switches are separate, and only the hardware one is off.
+
+    This test previously asserted that a *default* world refuses every command,
+    which was true only because one flag was standing in for two unrelated
+    questions. The hardware switch is still off -- that part is a standing
+    invariant, not a preference -- but a simulated drive train is a physics
+    question, and answering it "no" made the laboratory unable to demonstrate
+    anything at all.
+    """
     config = SimulationConfig(physics_step_hz=20)
-    assert config.physical_actuation_enabled is False
+    assert config.physical_actuation_enabled is False, "hardware actuation ships off"
+    assert config.simulated_actuation_enabled is True, "the simulated chain is live"
+    assert config.actuator_chain_live is True
+
+    world = World(_snapshot((("r1", 0.0, 0.0, 0.0),), config=config))
+    assert world.apply_command(_command("r1", seq=1, linear=0.4)) is True
+    before = world.truth().robots["r1"]
+    for _ in range(20):
+        world.step(_DT)
+    after = world.truth().robots["r1"]
+    assert after.x > before.x, "the simulated chain must actually move the robot"
+    assert world.observe("r1").motion.actuation_enabled is True
+
+
+def test_a_dead_actuator_chain_refuses_commands_and_moves_nothing() -> None:
+    """When the chain really is off, the world must not move anything.
+
+    This is the behaviour the old test was reaching for, expressed against the
+    switch that actually controls it.
+    """
+    config = SimulationConfig(physics_step_hz=20, simulated_actuation_enabled=False)
+    assert config.actuator_chain_live is False
+
     world = World(_snapshot((("r1", 0.0, 0.0, 0.0),), config=config))
     assert world.apply_command(_command("r1", seq=1, linear=0.4)) is False
+    assert world.observe("r1").motion.actuation_enabled is False
     before = world.truth().robots["r1"]
     for _ in range(20):
         world.step(_DT)
@@ -288,9 +321,7 @@ def test_an_expired_command_triggers_watchdog_braking_and_a_coast_to_rest() -> N
     live_ticks = 20
     for index in range(40):
         if index < live_ticks:
-            world.apply_command(
-                _command("r1", seq=index + 2, linear=0.4, at_ns=world.sim_time_ns)
-            )
+            world.apply_command(_command("r1", seq=index + 2, linear=0.4, at_ns=world.sim_time_ns))
         world.step(_DT)
         speeds.append(world.truth().robots["r1"].v)
 
@@ -474,9 +505,7 @@ def test_battery_decreases_and_never_goes_below_zero() -> None:
 
     assert all(0.0 <= f <= 1.0 for f in fractions), "battery left its declared range"
     assert fractions[-1] < fractions[0], "battery did not decrease while driving"
-    assert all(
-        later <= earlier for earlier, later in pairwise(fractions)
-    ), "battery increased"
+    assert all(later <= earlier for earlier, later in pairwise(fractions)), "battery increased"
     # Driving drains more than idling: the per-metre term is a real term.
     idle = World(_snapshot((("r1", 0.0, 0.0, 0.0),), config=config))
     for _ in range(198):
@@ -486,8 +515,7 @@ def test_battery_decreases_and_never_goes_below_zero() -> None:
     # The drain matches the declared model rather than an arbitrary curve.
     travelled = math.hypot(world.truth().robots["r1"].x, world.truth().robots["r1"].y)
     expected = config.battery.start_fraction - (
-        travelled * config.battery.drain_per_metre_c
-        + 198 * _DT * config.battery.drain_per_second_idle_c
+        travelled * config.battery.drain_per_metre_c + 198 * _DT * config.battery.drain_per_second_idle_c
     )
     assert fractions[-1] == pytest.approx(expected, abs=1e-9)
 

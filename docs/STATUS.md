@@ -6,6 +6,76 @@ Updated: 2026-10-02 · Branch `feat/niharamesh-platform`
 **IMPLEMENTED** = code exists, not yet verified end to end.
 **NOT STARTED** · **BLOCKED** · **EXTERNAL LIMIT** = needs unavailable hardware/software.
 
+## Milestone A — simulated motion and the safety boundary
+
+**Implemented and verified.** Every number below comes from a command executed in
+this checkout; nothing is copied from an earlier report.
+
+Starting point, reproduced locally before any edit — all three named scenarios
+were frozen:
+
+```text
+three-way-junction -> incomplete duration 60.0
+   amr-01 cmds 1200 vetoes 1200 stops {'actuator_fault': 1200}
+   amr-02 cmds 1200 vetoes 1200 stops {'actuator_fault': 1200}
+   amr-03 cmds 1200 vetoes 1200 stops {'actuator_fault': 1200}
+headon-aisle       -> incomplete duration 60.0   (identical)
+infeasible-layout  -> incomplete duration 60.0   (identical)
+426 passed in 105.91s
+```
+
+Eleven defects were found and fixed. Each was reproduced by a test that failed
+first; none was fixed speculatively.
+
+| # | Defect | Root cause |
+|---|---|---|
+| A1 | Nothing ever moved | `SimulationConfig.physical_actuation_enabled` was answering two questions at once — a *physics* question and a *hardware boundary* question |
+| A2 | Authority bypass via a zone ten metres away | `GateContext.inside_zone` carried "the next zone on the plan", not occupancy evidence, and satisfied a blanket authority rule |
+| A3 | A refusal became a full-speed pursuit | `_to_command` discarded `_decide`'s `SafetyDecision(False, ...)` and called `_pursue` anyway |
+| A4 | Veto-every-tick reported as a stalled loop | the "last command" timestamp advanced only on a *permitted* command |
+| A5 | A complete grant set could never become entry | the coordinator's `safety_check` kept its refusing default because nothing supplied one |
+| A6 | `GRANTED` and `OCCUPIED` were one question | `may_enter()` returns false after entry, which was being read as "the aisle is free" |
+| A7 | A clear aisle reported `obstacle_0.000m` | `_box_gap` accumulated SAT projections with `min` where the theorem requires `max`, so a body facing backwards clamped a genuine 0.30 m gap to zero |
+| A8 | Two of three robots frozen by a lateral shelf | the stopping budget is longitudinal but was compared against the nearest obstacle in *any* direction |
+| A9 | A vetoed robot could never steer away | a veto zeroed angular velocity as well as linear, so a robot pointed at a shelf could not translate, could not turn, and stayed pointed at it |
+| A10 | Crash opening a second zone | holding authority for one zone, the runtime called `begin_acquire` for a *different* one and hit the invariant-6 raise |
+| A11 | Measured obstacle evidence silently vanished | sensor bearings are **world**-frame and were filtered as if they were body-frame |
+
+Current state, executed:
+
+```powershell
+.\.venv\Scripts\python.exe -m pytest -q -p no:cacheprovider
+# 512 passed in 66.69s; exit 0        (was 426)
+.\.venv\Scripts\python.exe -m ruff check src tests scripts --no-cache
+# All checks passed!
+.\.venv\Scripts\python.exe -m mypy --cache-dir var/mypy-milestone-a
+# Success: no issues found in 71 source files
+pnpm --filter @niharamesh/web exec tsc --noEmit          # exit 0
+pnpm --filter @niharamesh/web test                       # 63 passed (7 files)
+pnpm --filter @niharamesh/web build                      # built in 7.77s
+```
+
+Contract regeneration is **implemented and verified reproducible**: running
+`node packages/contracts/generate.mjs` twice produced a byte-identical
+`SimulationConfig.json` (SHA-256 compared between runs).
+
+Where the fleet actually stands now, measured on the authored scenarios at a 150 s
+budget. **This is progress, not completion** — no scenario completes a task yet,
+and that is Milestone B's work:
+
+| Scenario | Outcome | Notes |
+|---|---|---|
+| `three-way-junction` | `incomplete` | amr-02 holds `zn-junction`; amr-03 correctly starves behind it. No zone is ever entered or released |
+| `headon-aisle` | `incomplete` | both unobstructed robots driving at the 0.4 m/s limit; transient `obstacle_in_path` vetoes while turning |
+| `cycle-with-holding` | `incomplete` | no crash; two robots correctly hold one zone each |
+| `blocked-exit` | `incomplete` | two robots unobstructed; amr-03 correctly queued |
+| `dynamic-arrivals` | `incomplete` | all three report "no reachable task remains" — the scenario task feed is not yet fed into the auction |
+| `asymmetric-partition` | `incomplete` | amr-03 holds `zn-part-mid-w` and stops; the partition is not yet applied to transport |
+| `infeasible-layout` | `incomplete` | **not** yet `expected_safe_stop`; depends on Milestone B's task binding and classification |
+
+A zero collision count is not a safety proof and no makespan has been measured.
+The 20 % improvement target remains **unmeasured**.
+
 ## Environment (recorded, verified)
 
 | Component | Version |
@@ -17,7 +87,35 @@ Updated: 2026-10-02 · Branch `feat/niharamesh-platform`
 | OpenCode | **2.0.22** — v2 schema (`agents`, `permissions`, `mode: subagent`) |
 | Docker | **absent** |
 
-## Quality gates — all green
+## Latest relay verification — executed 2026-10-02
+
+The new integration tests first failed with `ACQUIRING` instead of `GRANTED`.
+After the relay fix, both passed, including cancellation and all three voter
+acknowledgements. These checks used the installed virtual environment directly:
+
+```powershell
+.\.venv\Scripts\python.exe -m pytest -q -p no:cacheprovider
+# 426 passed in 80.58s; exit 0
+.\.venv\Scripts\python.exe -m ruff check src tests scripts --no-cache
+# All checks passed!
+.\.venv\Scripts\python.exe -m mypy --cache-dir var/mypy-relay-check
+# Success: no issues found in 71 source files
+```
+
+Execution caveats: `uv run` could not write its user cache in this sandbox, so
+the existing `.venv` was used. Pytest's default cache was also unwritable and was
+disabled. The full suite emitted a Windows `0x8007000e` diagnostic during WMI
+initialisation at collection, then continued to all 426 passes and exit 0.
+The focused two-test run was clean. Frontend checks below were not rerun for
+this Python-only repair.
+
+Git inspection found 12 existing commits at `505629a`, and **both**
+`src/niharamesh/runs/harness.py` and `orchestrator.py` were hidden by the
+unanchored `runs/` ignore rule. It is now `/runs/`, so the existing source and
+the repair are visible as untracked files and can be committed. No commit was
+created by this repair; the original build prompt remains untracked.
+
+## Previous handoff verification (retained as previously reported)
 
 ```
 uv run ruff check src tests scripts   → All checks passed!
@@ -35,7 +133,7 @@ uv run nihara scenarios validate --structural-only   -> 6 launchable, 1 diagnost
 
 | Feature | Status | Evidence |
 |---|---|---|
-| Git repo on `feat/niharamesh-platform`, 8 coherent commits | VERIFIED | `git log --oneline` |
+| Git repo on `feat/niharamesh-platform`, 12 existing commits | VERIFIED | `git rev-list --count HEAD`, `git log --oneline`; local relay repair not committed |
 | `AGENTS.md` with 10 invariants | VERIFIED | `AGENTS.md` |
 | `opencode.jsonc` using **v2** schema | VERIFIED | validated against opencode.ai/v2/docs |
 | Domain contracts (13 modules) | VERIFIED | `ruff` + `mypy --strict` clean |
@@ -78,7 +176,8 @@ the **20 % reduction is the organiser's own success criterion**, not our claim.
 | Event store, explicit recording gaps, read-model rebuild | VERIFIED | `tests/unit/test_eventstore.py` |
 | Safety gate: one veto point, operator command not privileged | IMPLEMENTED | `safety/gate.py`; **no dedicated test file yet** |
 | RobotAgent runtime (planner + auction + coordinator + gate) | IMPLEMENTED | `agent/runtime.py`; imports, type-checks, runs |
-| Deterministic single-process harness | IMPLEMENTED | `runs/harness.py`; runs all 7 scenarios |
+| Deterministic single-process harness | IMPLEMENTED | `runs/harness.py`; end-to-end task lifecycle incomplete |
+| Harness protocol relay | VERIFIED | `tests/integration/test_harness_relay.py`: complete canonical grant acquisition and durable cancellation acknowledgements |
 | 7 named scenarios, structural vs workload validation | VERIFIED | `uv run nihara scenarios validate` |
 | CLI: `doctor`, `scenarios export/list/validate/show` | VERIFIED | exit codes verified |
 
@@ -96,34 +195,56 @@ the **20 % reduction is the organiser's own success criterion**, not our claim.
 | CLI `run` / `benchmark` / `serve` / `agent` / `replay` | NOT STARTED | Commands register only when their runtime exists; `nihara --help` says so |
 | ROS 2 boundary, Docker, edge profiles | NOT STARTED | EXTERNAL LIMIT (no ROS, no Docker, no ARM) |
 
-### The one blocking defect
+### Relay repaired; task completion still blocked
 
-**Tasks never complete.** The harness runs the world, agents plan, follow paths
-and engage the coordination protocol (inspectors show `acquiring; walking
-canonical order`), but the zone **grant exchange does not complete**, so no robot
-ever enters a zone and every scenario ends `incomplete`.
+The previous diagnosis did not match this checkout. `_drain_outboxes` was absent,
+and `ZoneRequester` has no outbox. `ZoneProtocol.tick()` turns requester actions
+into framed `(target, PeerMessage)` entries in **`agent.coordinator.outbox`**.
+The harness now drains that queue for every sender before delivering messages
+once per physics tick. Responses created during ingestion wait until the next
+tick. It preserves the agent's message, recipient and sequence; it makes no
+coordination decision and does not synthesize peer state.
 
-Root cause located: the harness drains `agent.coordinator.outbox`, but the requester
-appends to `agent.coordinator.requester.outbox`. The relay is reading the wrong
-queue, so no `ZoneGrantBody` ever reaches a voter.
+The real deterministic scenario checks, each run for **60 simulation seconds /
+1,200 physics steps**, produced:
 
-Next step, precisely: in `src/niharamesh/runs/harness.py::_drain_outboxes`, drain
-`agent.coordinator.requester.outbox` (or whichever queue the requester actually
-fills, confirmed against `coordination/requester.py:832`). Then re-run:
+| Scenario | Actual outcome | Completed tasks | Coordination evidence |
+|---|---|---|---|
+| `three-way-junction` | `incomplete` | 0 | `amr-02` collected all three grants; `amr-03` was refused while that promise remained held |
+| `headon-aisle` | `incomplete` | 0 | No acquisition began on the initial pickup paths |
+| `infeasible-layout` | `incomplete` | 0 | Robot never reached the pickup/drop transition needed to diagnose the drop route |
 
-```powershell
-uv run python -c "from niharamesh.scenario.library import build_all; from niharamesh.runs.harness import run_scenario; \
-  [print(s, run_scenario(build_all()[s], run_id='r', max_sim_time_s=60).outcome) \
-   for s in ('three-way-junction','headon-aisle','infeasible-layout')]"
-```
+Every robot reported `actuator_fault` on all 1,200 commands in these runs.
+The scenario defaults set `physical_actuation_enabled=False`; the world copies
+that flag into observations and rejects simulated commands, and the gate reports
+`actuation_disabled`. This run is not evidence of moving-fleet safety.
 
-Expect `three-way-junction` → `success`, `infeasible-layout` →
-`expected_safe_stop`. Those are the two behaviours the scenarios were authored to
-produce, and neither has been observed yet.
+Full scenario snapshots, manifests, harness results and protocol events are in
+`var/verification/harness-relay/{scenario-id}.json` (generated and gitignored).
+Each artifact records the 60-second override, source revision and dirty state.
 
-Also outstanding in that area: the auction is not yet fed the scenario task feed,
-so robots without a fixed `assigned_task_id` report *"no reachable task remains for
-this robot"* (`dynamic-arrivals` is entirely affected).
+Independent runtime blockers remain:
+
+1. Simulation motion is coupled to the physical-actuation opt-in. Define and
+   test that boundary before enabling simulated movement; do not just bypass
+   the gate or turn on physical actuation globally.
+2. `RobotAgent` supplies no coordinator `safety_check`. The default refuses
+   entry even after the complete grant set is collected.
+3. `_to_command` ignores `_decide`'s refusal, and passes an upcoming zone as
+   `inside_zone`. Meanwhile the gate rejects ordinary unzoned linear movement.
+   The command/zone evidence contract needs focused tests before integration.
+4. No runtime code starts station service, updates carrying/completion credit,
+   marks zone entry or releases it after clearance. Completion traces are never
+   populated. Entry permission (`GRANTED`) must be distinguished from retained
+   authority (`OCCUPIED`); timers must never clear occupancy.
+5. The control-loop timestamp advances only on permitted commands, so a long
+   veto after motion can latch `CONTROL_LOOP_STALLED` even while ticks continue.
+6. Auctions still receive no scenario task feed; unassigned robots do not acquire
+   tasks (`dynamic-arrivals` is affected).
+
+`three-way-junction -> success` and `infeasible-layout -> expected_safe_stop`
+remain **unobserved target behaviours**. Repairing message delivery does not make
+the benchmark suite runnable or establish any makespan improvement.
 
 ## Measured outcomes
 
@@ -150,7 +271,8 @@ in either direction. See `docs/KNOWN_LIMITATIONS.md` §1 and
 
 ## External verification limits
 
-- Docker absent → Compose path authored, unexecuted.
-- ROS 2 absent → bridge build unexecuted.
+- Docker absent → Compose integration not implemented or executed.
+- ROS 2 absent → bridge integration not implemented or executed.
 - No ARM hardware → edge figures are specifications.
+- The latest Python suite completed with exit 0 after a Windows WMI startup diagnostic; see the exact verification notes above.
 - Playwright **was** exercised against the real absence of an API: 8 specs assert the honest-failure behaviour and 40 skip with a reason naming the command that starts the API. The 50 passing runs came from a throwaway mock **outside** this repository - evidence about the cockpit, not about the real backend.

@@ -404,6 +404,11 @@
         "range_noise_m": 0.02
       }
     },
+    "simulated_actuation_enabled": {
+      "default": true,
+      "title": "Simulated Actuation Enabled",
+      "type": "boolean"
+    },
     "state_publish_hz": {
       "default": 10,
       "maximum": 60,

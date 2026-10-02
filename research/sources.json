@@ -1,0 +1,382 @@
+[
+  {
+    "id": "dossier-nihara-google-doc",
+    "title": "SIH26123 project dossier (living Google Doc)",
+    "url": "https://docs.google.com/document/d/1o9qfFzLK0UZBnQ1RRXQq-H4fyKzqRv5UmukPL9Q8nII/edit?usp=sharing",
+    "source_type": "dossier",
+    "publisher": "Google Docs (team-owned)",
+    "accessed": "2026-10-02",
+    "retrieved": false,
+    "note": "INACCESSIBLE. HTTP 200 but body contains only the title 'SIH26123 - Google Docs', the string 'This browser version is no longer supported. Please upgrade to a supported browser.', and 'Sign in'. Zero dossier content. No claim anywhere may be attributed to it. Sharing was not modified and no sign-in was attempted."
+  },
+  {
+    "id": "edge-rpi5-documentation",
+    "title": "Raspberry Pi computer hardware (official documentation, hardware comparison table)",
+    "url": "https://www.raspberrypi.com/documentation/computers/raspberry-pi.html",
+    "source_type": "official_docs",
+    "publisher": "Raspberry Pi Ltd",
+    "accessed": "2026-10-02",
+    "retrieved": true,
+    "note": "First-party fallback used after the product page 403'd. Verified from the table: Raspberry Pi 5 — SoC BCM2712, RAM 1/2/4/8/16 GB, 40-pin GPIO, 2x micro-HDMI, 2x USB 2.0, 2x USB 3.0, single-lane PCIe FFC, UART, RTC battery, 4-pin JST-SH PWM fan, Gigabit (1 Gb/s) Ethernet RJ45 with PoE+, 2.4/5 GHz 802.11ac Wi-Fi 5 (300 Mb/s), Bluetooth 5 + BLE, microSD, USB-C 5 V at 5 A (25 W) or 5 V at 3 A (15 W) with 600 mA peripheral limit. Compute Module 5 — BCM2712, RAM 2/4/8/16 GB, optional Wi-Fi 5 + BT 5. SPECIFICATION ONLY: no Pi hardware was available to the team, so nothing here is a measurement."
+  },
+  {
+    "id": "edge-rpi5-product-brief",
+    "title": "Raspberry Pi 5 product brief (datasheet PDF)",
+    "url": "https://datasheets.raspberrypi.com/raspberry-pi-5-product-brief.pdf",
+    "source_type": "official_site",
+    "publisher": "Raspberry Pi Ltd",
+    "accessed": "2026-10-02",
+    "retrieved": false,
+    "note": "NOT RETRIEVED: HTTP 404. Not used as a fallback."
+  },
+  {
+    "id": "edge-rpi5-product-page",
+    "title": "Raspberry Pi 5 product page",
+    "url": "https://www.raspberrypi.com/products/raspberry-pi-5/",
+    "source_type": "official_site",
+    "publisher": "Raspberry Pi Ltd",
+    "accessed": "2026-10-02",
+    "retrieved": false,
+    "note": "NOT RETRIEVED: HTTP 403. The raspberrypi.com/documentation/computers/processors.html#bcm2712 page also returned 403. CONSEQUENCE: CPU core count, clock speed and instruction set for Pi 5 / BCM2712 are UNVERIFIED and must not appear in our edge profile until a first-party page is successfully fetched."
+  },
+  {
+    "id": "eng-fastapi-docker",
+    "title": "FastAPI in Containers — Docker",
+    "url": "https://fastapi.tiangolo.com/deployment/docker/",
+    "source_type": "official_docs",
+    "publisher": "FastAPI / tiangolo",
+    "accessed": "2026-10-02",
+    "retrieved": true,
+    "note": "Build from scratch on the official Python image; the tiangolo/uvicorn-gunicorn-fastapi base image is deprecated ('You should probably not use this base image'). uv projects: export the lock with 'uv export --format requirements-txt --no-dev --no-emit-project --output-file requirements.txt'. Always use the exec form of CMD so shutdown is graceful and lifespan events fire (shell form costs ~10 s on recreate/stop). Copy requirements.txt before source to preserve the Docker cache layer. One process per container when a cluster handles replication; --workers N only for the simple single-server case. --proxy-headers behind a TLS-terminating proxy. Multi-worker/multi-replica is a reminder that our API must stay stateless w.r.t. coordination."
+  },
+  {
+    "id": "eng-pixijs-ticker",
+    "title": "PixiJS 8 — Ticker",
+    "url": "https://pixijs.com/8.x/guides/components/ticker",
+    "source_type": "official_docs",
+    "publisher": "PixiJS",
+    "accessed": "2026-10-02",
+    "retrieved": true,
+    "note": "Ticker 'provides a powerful and flexible mechanism for executing callbacks on every animation frame' for game loops, animations and 'any time-based updates'; can be constructed standalone (new Ticker(); add(fn, ctx); addOnce; remove; start/stop; autoStart). Listener priority: higher runs earlier, UPDATE_PRIORITY.HIGH=50 / NORMAL=0 / LOW=-50. Frame clamping: minFPS 'Caps how slow frames are allowed to be. Used to clamp deltaTime'; maxFPS 'Limits how fast the ticker runs'; maxFPS=0 for unlimited. Basis for owning the render loop in a dedicated Ticker outside React reconciliation, and for treating deltaTime as display-only (simulation time must come from telemetry, per our clock-domain rule)."
+  },
+  {
+    "id": "eng-playwright-assertions",
+    "title": "Playwright — Assertions",
+    "url": "https://playwright.dev/docs/test-assertions",
+    "source_type": "official_docs",
+    "publisher": "Microsoft (Playwright docs)",
+    "accessed": "2026-10-02",
+    "retrieved": true,
+    "note": "Auto-retrying locator assertions 'will retry until the assertion passes, or the assertion timeout is reached'; default assertion timeout 5 s, configurable via testConfig.expect. Warns that non-retrying assertions on asynchronously-loaded pages 'can lead to a flaky test' and to prefer auto-retrying assertions, expect.poll or expect.toPass. Documents expect.soft + expect(test.info()).errors, expect.configure({ timeout }), and the custom expect message argument. Basis for our readiness strategy."
+  },
+  {
+    "id": "eng-playwright-navigations",
+    "title": "Playwright — Navigations",
+    "url": "https://playwright.dev/docs/navigations",
+    "source_type": "official_docs",
+    "publisher": "Microsoft (Playwright docs)",
+    "accessed": "2026-10-02",
+    "retrieved": true,
+    "note": "'There is no way to tell that the page is loaded, it depends on the page, framework, etc.' Playwright auto-waits for actionability; recommends explicit page.waitForURL for navigations; warns about poor hydration."
+  },
+  {
+    "id": "eng-playwright-network",
+    "title": "Playwright — Network",
+    "url": "https://playwright.dev/docs/network",
+    "source_type": "official_docs",
+    "publisher": "Microsoft (Playwright docs)",
+    "accessed": "2026-10-02",
+    "retrieved": true,
+    "note": "Source for the deterministic alternative to idle-waiting: page.route / browserContext.route with route.fulfill to stub telemetry, page.waitForResponse(glob|regexp|predicate) to await a specific response, page.on('request'/'response') for event-level assertions, and the note to set serviceWorkers: 'block' if route-based mocking appears to miss events."
+  },
+  {
+    "id": "eng-playwright-page-api",
+    "title": "Playwright — Page API (page.goto, page.waitForLoadState)",
+    "url": "https://playwright.dev/docs/api/class-page",
+    "source_type": "official_docs",
+    "publisher": "Microsoft (Playwright docs)",
+    "accessed": "2026-10-02",
+    "retrieved": true,
+    "note": "Verbatim vendor deprecation: \"'networkidle' — DISCOURAGED wait until there are no network connections for at least 500 ms. Don't use this method for testing, rely on web assertions to assess readiness instead.\" Repeated for every waitUntil option (goto, reload, goBack, goForward, waitForURL, waitForNavigation, setContent). Also states page.waitForLoadState 'should not need it in most cases'. This is the primary citation for banning networkidle as a readiness signal in our continuous-telemetry cockpit."
+  },
+  {
+    "id": "eng-uv-workspaces",
+    "title": "uv — Using workspaces",
+    "url": "https://docs.astral.sh/uv/concepts/projects/workspaces/",
+    "source_type": "official_docs",
+    "publisher": "Astral (uv documentation)",
+    "accessed": "2026-10-02",
+    "retrieved": true,
+    "note": "Workspace = 'a collection of one or more packages, called workspace members, that are managed together'; single shared lockfile; 'uv lock operates on the entire workspace at once, while uv run and uv sync operate on the workspace root by default, though both accept a --package argument'. [tool.uv.workspace] with required members / optional exclude globs; root is also a member; cross-member deps via { workspace = true } and are editable; a member's own tool.uv.sources entry overrides the root even when its marker does not match the platform. Limits: single requires-python across the workspace (intersection); not suited to members needing separate venvs (use path deps); and crucially 'uv can't ensure that packages don't import dependencies declared by another workspace member' — citable justification for our own import/authority-boundary tests."
+  },
+  {
+    "id": "eval-movingai-formats",
+    "title": "Pathfinding Benchmarks: File Formats (.map and .scen specification)",
+    "url": "https://www.movingai.com/benchmarks/formats.html",
+    "source_type": "official_docs",
+    "publisher": "Moving AI Lab, University of Alberta",
+    "accessed": "2026-10-02",
+    "retrieved": true,
+    "note": "Authoritative format grammar. .map header: 'type octile', 'height y', 'width x', 'map'; ASCII grid, (0,0) upper-left; characters . G @ O T S W with the stated passability. .scen: begins 'version x.x' (1.0); each line has 9 whitespace fields: Bucket, map, width, height, start_x, start_y, goal_x, goal_y, optimal_length; optimal length assumes sqrt(2) diagonals and no corner cutting through walls. There is NO field for service time, task release time, load, or task identity — proof that MAPF scenarios are not pickup-delivery workloads."
+  },
+  {
+    "id": "eval-movingai-grids",
+    "title": "Moving AI — 2D Pathfinding Benchmarks (index page)",
+    "url": "https://www.movingai.com/benchmarks/grids.html",
+    "source_type": "official_site",
+    "publisher": "Moving AI Lab, University of Alberta",
+    "accessed": "2026-10-02",
+    "retrieved": true,
+    "note": "Links the official file-format page and repeats the Open Data Commons Attribution License. Supplies the required grid-benchmark citation (Sturtevant 2012)."
+  },
+  {
+    "id": "eval-movingai-mapf",
+    "title": "Moving AI — Multi-Agent Path-Finding (MAPF) Benchmarks",
+    "url": "https://www.movingai.com/benchmarks/mapf.html",
+    "source_type": "official_site",
+    "publisher": "Moving AI Lab, University of Alberta (Nathan Sturtevant)",
+    "accessed": "2026-10-02",
+    "retrieved": true,
+    "note": "States the scenario design: 25 (x2) benchmark sets per map; random set capped at 1000 problems per file; even set bucketed in 10s of equal (length/4); intended usage 'add one agent at a time until an algorithm cannot solve a problem'. Required citation: Stern et al., 'Multi-Agent Pathfinding: Definitions, Variants, and Benchmarks', SoCS 2019. Data under the Open Data Commons Attribution License."
+  },
+  {
+    "id": "eval-movingai-mapf-index",
+    "title": "Moving AI — MAPF benchmark set index",
+    "url": "https://www.movingai.com/benchmarks/mapf/index.html",
+    "source_type": "official_site",
+    "publisher": "Moving AI Lab, University of Alberta",
+    "accessed": "2026-10-02",
+    "retrieved": true,
+    "note": "Per-map inventory used verbatim in RESEARCH.md: 33 maps with dimensions and free-cell counts, incl. the four warehouse maps warehouse-10-20-10-2-1 (161x63, 5699), warehouse-10-20-10-2-2 (170x84, 9776), warehouse-20-40-10-2-1 (321x123, 22599), warehouse-20-40-10-2-2 (340x164, 38756). Also notes room-64-64-16.map was rebuilt on 2021-06-17 to have a single connected component. Archives (.zip) were not downloadable by our fetcher."
+  },
+  {
+    "id": "eval-nist-bootstrap-plot",
+    "title": "NIST/SEMATECH e-Handbook of Statistical Methods — Bootstrap Plot",
+    "url": "https://www.itl.nist.gov/div898/handbook/eda/section3/eda334.htm",
+    "source_type": "official_docs",
+    "publisher": "NIST Information Technology Laboratory",
+    "accessed": "2026-10-02",
+    "retrieved": true,
+    "note": "Defines the bootstrap procedure (subsample with replacement, typically 500-1000 resamples) and the percentile interval by ordering resampled statistics and reading off percentiles; states the motivation ('many situations in which the uncertainty formulas are mathematically intractable. The bootstrap provides a method for calculating the uncertainty in these cases'); and cautions the bootstrap is not appropriate for all distributions/statistics."
+  },
+  {
+    "id": "eval-nist-confidence-limits",
+    "title": "NIST/SEMATECH e-Handbook of Statistical Methods — Confidence Limits for the Mean",
+    "url": "https://www.itl.nist.gov/div898/handbook/eda/section3/eda352.htm",
+    "source_type": "official_docs",
+    "publisher": "NIST Information Technology Laboratory",
+    "accessed": "2026-10-02",
+    "retrieved": true,
+    "note": "States that confidence intervals for other location estimators such as the median are 'mathematically difficult or intractable' and that these cases use the bootstrap. Also clarifies that a 95% interval does not mean a 95% probability for a given sample — the level is attached to the method. Used to justify reporting the paired-ratio interval as a 95% NOMINAL interval."
+  },
+  {
+    "id": "eval-nist-location",
+    "title": "NIST/SEMATECH e-Handbook of Statistical Methods — Measures of Location",
+    "url": "https://www.itl.nist.gov/div898/handbook/eda/section3/eda351.htm",
+    "source_type": "official_docs",
+    "publisher": "NIST Information Technology Laboratory",
+    "accessed": "2026-10-02",
+    "retrieved": true,
+    "note": "Source for Tukey/Mosteller's robustness of validity vs robustness of efficiency, and for the statements that a mean-based interval 'lacks robustness of validity' for non-normal data while the median 'tends to have robustness of validity but not robustness of efficiency'. Basis for recommending median-of-ratios + percentile interval over mean-of-ratios at small n."
+  },
+  {
+    "id": "eval-stern-socs",
+    "title": "Multi-Agent Pathfinding: Definitions, Variants, and Benchmarks",
+    "url": "https://www.movingai.com/benchmarks/mapf.html",
+    "source_type": "paper",
+    "publisher": "Symposium on Combinatorial Search (SoCS) 2019; Stern, Sturtevant, Felner, Koenig, Ma, Walker, Li, Atzmon, Cohen, Satish Kumar, Boyarski, Bartak",
+    "accessed": "2026-10-02",
+    "retrieved": false,
+    "note": "NOT RETRIEVED. This is the REQUIRED citation for the MAPF datasets, but its text was not obtained. The url field points to the page that publishes the required citation; no separate canonical URL was retrieved. Treat the citation string as transcribed, not verified."
+  },
+  {
+    "id": "mapf-pibt-aij",
+    "title": "Priority Inheritance with Backtracking for Iterative Multi-agent Path Finding (Artificial Intelligence 298:103752)",
+    "url": "https://doi.org/10.1016/j.artint.2022.103752",
+    "source_type": "paper",
+    "publisher": "Elsevier (Artificial Intelligence), Okumura, Machida, Defago, Tamura",
+    "accessed": "2026-10-02",
+    "retrieved": false,
+    "note": "NOT RETRIEVED (paywalled publisher landing page; PDF not renderable by our fetcher). Citation details transcribed from the author project page. Any line-level algorithmic claim is unverified."
+  },
+  {
+    "id": "mapf-pibt-ijcai19",
+    "title": "PIBT (IJCAI-19 conference version repository/project page)",
+    "url": "https://kei18.github.io/pibt/",
+    "source_type": "official_site",
+    "publisher": "Keisuke Okumura",
+    "accessed": "2026-10-02",
+    "retrieved": false,
+    "note": "NOT FETCHED SEPARATELY. Known only as a link from the PIBT2 page, which states PIBT2 'substantially updated' it. No claim in RESEARCH.md depends on this page."
+  },
+  {
+    "id": "mapf-pibt2-project",
+    "title": "Priority Inheritance with Backtracking for Iterative Multi-agent Path Finding (PIBT / PIBT2 project page)",
+    "url": "https://kei18.github.io/pibt2/",
+    "source_type": "official_site",
+    "publisher": "Keisuke Okumura (author), Tokyo Institute of Technology",
+    "accessed": "2026-10-02",
+    "retrieved": true,
+    "note": "States: PIBT decides next locations in descending priority order via communications only with local agents; liveness guarantee holds when 'the environment is a graph such that all pairs of adjacent nodes belong to a simple cycle (e.g., biconnected)'; PIBT2 substantially supersedes the IJCAI-19 repo; erratum that delta(G) is maximum degree not diameter; PIBT was core of the winning 2023 MAPF competition strategy (825 submissions)."
+  },
+  {
+    "id": "mapf-temporary-priority",
+    "title": "Deadlock-Free Method for Multi-Agent Pickup and Delivery Problem Using Priority Inheritance with Temporary Priority",
+    "url": "https://arxiv.org/abs/2205.12504",
+    "source_type": "paper",
+    "publisher": "arXiv (cs.MA), Fujitani, Yamauchi, Miyashita, Sugawara; KES 2022",
+    "accessed": "2026-10-02",
+    "retrieved": true,
+    "note": "States PIBT 'is only applicable to environments that are modeled as a bi-connected area, and if it contains dead-ends, such as tree-shaped paths, PIBT may cause deadlocks'; fix is temporary priorities plus restricted movement inside trees; motivates the setting by dead-end shelf and loading/unloading locations. Directly contradicts any deadlock-freedom claim for our dead-end warehouse maps."
+  },
+  {
+    "id": "nav2-collision-monitor",
+    "title": "Nav2 — Collision Monitor Node",
+    "url": "https://docs.nav2.org/rolling/configuration_and_development/configuration_guide/core_servers/collision_monitor/configuring_collision_monitor_node/",
+    "source_type": "official_docs",
+    "publisher": "ros-navigation / docs.nav2.org (rolling branch)",
+    "accessed": "2026-10-02",
+    "retrieved": true,
+    "note": "Explicit non-certification statement: 'this node is done at the CPU level with any form of sensor. As such, this does not provide hard real-time safety certifications'. Four models: Stop, Slowdown, Limit, Approach; most aggressive wins (stop > slow 50% > slow 10%). Zone shapes: polygon, footprint, circle, VelocityPolygon (velocity-dependent). Sources: LaserScan, PointCloud2, Range, Costmap. Exclusion zones mask a source's own returns and are fail-safe ('if the zone transform is unavailable, no points are removed, so collision protection is never silently lost'). source_timeout default 2.0 s stops the robot when data goes stale; stop_pub_timeout default 1.0 s; use_realtime_priority default false requires rtprio 99 in /etc/security/limits.conf. NOTE: rolling docs, not Jazzy — parameter names must be re-verified against Jazzy."
+  },
+  {
+    "id": "ros2-on-dds",
+    "title": "ROS on DDS",
+    "url": "https://design.ros2.org/articles/ros_on_dds.html",
+    "source_type": "official_docs",
+    "publisher": "Open Source Robotics Foundation (design.ros2.org); W. Woodall; written 2014-06, last modified 2019-07",
+    "accessed": "2026-10-02",
+    "retrieved": true,
+    "note": "Rationale only — the article self-declares it predates final decisions. Key points: DDS is OMG-standardised so behaviour is documented and auditable; 'The default discovery system provided by DDS... is distributed... without the need for a tool like the ROS master', which removes a single point of failure; QoS spans best-effort to reliable, suiting lossy wireless. Honest caveats quoted: adopting DDS adopts that middleware's culture; the standard body is 'slow moving'; 'it isn't the feeling of a large community to fall back on with DDS'. Licensed CC BY 3.0 per its footer."
+  },
+  {
+    "id": "ros2-qos-settings",
+    "title": "ROS 2 — Quality of Service settings",
+    "url": "https://github.com/ros2/ros2_documentation/blob/rolling/source/ROS-Framework/interfaces/topics/About-Quality-of-Service-Settings.rst",
+    "source_type": "official_docs",
+    "publisher": "ros2_documentation (rolling branch)",
+    "accessed": "2026-10-02",
+    "retrieved": true,
+    "note": "Fetched as raw RST. Policies: history, depth, reliability, durability, deadline, lifespan, liveliness, lease duration. Compatibility is request-vs-offered: best-effort publisher + reliable subscription is incompatible ('No'); volatile publisher + transient-local subscription gives 'No communication'. Incompatibility is silent: 'When connections are not made, no messages will be passed between the publisher and subscription.' Detection requires QoS events (offered/requested incompatible QoS, deadline missed, liveliness lost/changed) and matched events. Default pub/sub = keep-last depth 10, reliable, volatile, system-default liveliness. 'even the reliable policy in ROS 2 is implemented using UDP.'"
+  },
+  {
+    "id": "ros2-rep-2000",
+    "title": "REP 2000: ROS 2 Releases and Target Platforms",
+    "url": "https://github.com/ros-infrastructure/rep/blob/master/rep-2000.rst",
+    "source_type": "official_docs",
+    "publisher": "ROS 2 Enhancement Proposals (ros-infrastructure)",
+    "accessed": "2026-10-02",
+    "retrieved": true,
+    "note": "Fetched as raw RST. Verified: 'Jazzy Jalisco (May 2024 - May 2029)' with Ubuntu Noble (24.04) amd64 Tier 1 and arm64 Tier 1, C++17 / Python 3.8 minimums, default RMW rmw_fastrtps_cpp (eProsima Fast-DDS) Tier 1, rmw_cyclonedds_cpp Tier 1. 'Humble Hawksbill (May 2022 - May 2027)' Tier 1 on Ubuntu Jammy (22.04) — i.e. Humble has NOT reached EOL as of 2026-10-02. 'Kilted Kaiju (May 2025 - November 2026)' — non-LTS, window closes Nov 2026. 'Rolling Ridley (June 2020 - Ongoing)'. Policy: single Ubuntu LTS Tier 1 per distro; LTS supported to end of standard Ubuntu LTS support (4 years 11 months)."
+  },
+  {
+    "id": "sih-mirror-ps-viewer",
+    "title": "SIH 2026 problem statement mirror (SIH26123)",
+    "url": "https://sih2026-ps-viewer.vercel.app/ps/SIH26123",
+    "source_type": "secondary",
+    "publisher": "sih2026-ps-viewer (Vercel, third party, no stated provenance)",
+    "accessed": "2026-10-02",
+    "retrieved": true,
+    "note": "Requested /ps/SIH26123 but the server returned the full 260-statement index, which contains the row 'SIH26123 Software Edge-AI Based Distributed Fleet Coordination for Autonomous Mobile Robots (AMRs) in Smart Warehouses Bharat Electronics Limited Smart Automation'. Corroborates Software + organisation + theme. Its own page states 'data captured 2026-10-02'. Corroboration only, never authority."
+  },
+  {
+    "id": "sih-portal-home",
+    "title": "Smart India Hackathon official portal (home)",
+    "url": "https://sih.gov.in/",
+    "source_type": "official_site",
+    "publisher": "Ministry of Education / AICTE (SIH)",
+    "accessed": "2026-10-02",
+    "retrieved": true,
+    "note": "Confirms SIH theme list (incl. Smart Automation) and that 'BHARAT ELECTRONICS LIMITED' is listed among participating Central ministries/departments/PSUs. Does not itself carry SIH26123."
+  },
+  {
+    "id": "sih-portal-ps-2026",
+    "title": "SIH 2026 Problem Statements table",
+    "url": "https://sih.gov.in/sih2026PS",
+    "source_type": "official_site",
+    "publisher": "Ministry of Education / AICTE (SIH)",
+    "accessed": "2026-10-02",
+    "retrieved": true,
+    "note": "Authoritative metadata for SIH26123 (row 123), read verbatim: Organization 'Bharat Electronics Limited', Department 'Bharat Electronics Limited', Category 'Software', Theme 'Smart Automation', PS number SIH26123, deadline 5 October 2026. Also supplies the organiser's success criteria: 'Zero inter-robot collisions and a minimum 20% reduction in total task completion time compared to traditional stop-and-wait methods when handling overlapping paths', and the edge-hardware requirement naming Raspberry Pi / Jetson Nano. AGREES with team-recorded metadata. Page is client-side rendered; only the SIH26123 row was verified."
+  },
+  {
+    "id": "spatialtemporal-sbpl-software",
+    "title": "Search-Based Planning Lab software page (SBPL)",
+    "url": "https://sbpl.github.io/software/",
+    "source_type": "official_site",
+    "publisher": "Search-Based Planning Lab, Carnegie Mellon University",
+    "accessed": "2026-10-02",
+    "retrieved": true,
+    "note": "Confirms SIPP is part of SBPL, grouped under 'Navigation in Dynamic Environments (SIPP)', alongside ARA*, AD*, D*, R*, E-Graphs and lattice planners. Cited to show we reference, not vendor, the code."
+  },
+  {
+    "id": "spatialtemporal-sipp-fulltext",
+    "title": "SIPP ICRA 2011 full text",
+    "url": "https://www.cs.cmu.edu/~maxim/files/sipp_icra11.pdf",
+    "source_type": "paper",
+    "publisher": "Carnegie Mellon University",
+    "accessed": "2026-10-02",
+    "retrieved": false,
+    "note": "NOT RETRIEVED. Our fetcher refuses content type application/pdf. All SIPP-assumption statements in RESEARCH.md are therefore sourced from later retrievable primary sources and marked unverified where attributed to SIPP itself."
+  },
+  {
+    "id": "spatialtemporal-sipp-kinodynamic",
+    "title": "Safe Interval Path Planning With Kinodynamic Constraints",
+    "url": "https://arxiv.org/abs/2302.00776",
+    "source_type": "paper",
+    "publisher": "arXiv (cs.AI, cs.RO); Ali, Yakovlev",
+    "accessed": "2026-10-02",
+    "retrieved": true,
+    "note": "Load-bearing source for SIPP's key assumption: 'Original SIPP algorithm relies on the assumption that the agent is able to stop instantaneously... a mobile robot moving with a cruising speed is not able to stop immediately... in such a case original SIPP is incomplete.' Proposes a provably complete and optimal variant; the low-expansion property of SIPP is retained."
+  },
+  {
+    "id": "spatialtemporal-sipp-path-following",
+    "title": "Combining Safe Interval Path Planning and Constrained Path Following Control: Preliminary Results",
+    "url": "https://arxiv.org/abs/1906.06911",
+    "source_type": "paper",
+    "publisher": "arXiv (cs.RO), ICR'19; Yakovlev, Andreychuk, Belinskaya, Makarov",
+    "accessed": "2026-10-02",
+    "retrieved": true,
+    "note": "Describes SIPP as handling 'any-angle translations and rotations' with path-following treated as a separate constrained-control problem; successful navigation instances increase significantly when trajectories are made more trackable. Basis for separating our planner from our safety gate."
+  },
+  {
+    "id": "spatialtemporal-sipp-publication",
+    "title": "SIPP: Safe Interval Path Planning for Dynamic Environments (ICRA 2011 publication page)",
+    "url": "https://sbpl.github.io/publications/sipp-icra11/",
+    "source_type": "official_site",
+    "publisher": "Search-Based Planning Lab, Carnegie Mellon University",
+    "accessed": "2026-10-02",
+    "retrieved": true,
+    "note": "Confirms title, authors (Mike Phillips, Maxim Likhachev), venue ICRA 2011, and the full-text PDF URL. Contains no technical detail about SIPP's assumptions."
+  },
+  {
+    "id": "taskalloc-cbba-cbaa",
+    "title": "Consensus-Based Decentralized Auctions for Robust Task Allocation (CBAA / CBBA)",
+    "url": "https://dspace.mit.edu/entities/publication/b0bf0a05-be3b-433b-9f4b-ce314ed5178b",
+    "source_type": "paper",
+    "publisher": "MIT Open Access (DSpace record) / IEEE Transactions on Robotics 25(4):912-926, 2009; Choi, Brunet, How",
+    "accessed": "2026-10-02",
+    "retrieved": true,
+    "note": "Abstract and metadata only. States: market-based decentralized task selection plus a local-communication consensus routine resolving conflicts; 'Under reasonable assumptions on the scoring scheme, both of the proposed algorithms are proven to guarantee convergence to a conflict-free assignment'; robustness is claimed against inconsistent situational awareness and communication-topology variation, NOT against physical collisions. Handle http://hdl.handle.net/1721.1/52330."
+  },
+  {
+    "id": "taskalloc-cbba-doi",
+    "title": "CBAA/CBBA published version DOI",
+    "url": "https://doi.org/10.1109/tro.2009.2022423",
+    "source_type": "paper",
+    "publisher": "IEEE",
+    "accessed": "2026-10-02",
+    "retrieved": false,
+    "note": "NOT RETRIEVED (paywalled). Details beyond the MIT DSpace abstract (bid validity / epoch update rule) are unverified."
+  },
+  {
+    "id": "taskalloc-surplus-auction-search",
+    "title": "Search for a primary source on the 'surplus auction' family (three arXiv API queries)",
+    "url": "http://export.arxiv.org/api/query?search_query=all:%22surplus%20auction%22%20AND%20all:%22multi-robot%22&start=0&max_results=10",
+    "source_type": "secondary",
+    "publisher": "arXiv API",
+    "accessed": "2026-10-02",
+    "retrieved": false,
+    "note": "RETRIEVAL FAILED. This query AND two further queries (all:\"surplus-based auction\"; abs:\"surplus\" AND abs:\"auction\" AND abs:\"robot\") each returned opensearch:totalResults = 0. Crossref title search for 'surplus auction' returned only unrelated economics papers. CONSEQUENCE: every surplus-auction statement in RESEARCH.md is marked unverified: and must be omitted from downstream docs."
+  }
+]

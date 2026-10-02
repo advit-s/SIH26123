@@ -77,6 +77,9 @@ class FaultState(StrEnum):
     FAILED = "failed"
 
 
+type FaultParam = float | int | bool | str
+
+
 class FaultTarget(_Frozen):
     """Explicit sender/receiver targeting. A fault with no target is invalid -
     the brief requires directed fault injection, not a global toggle."""
@@ -106,7 +109,9 @@ class FaultSpec(_Frozen):
     #: Deterministic seed for the stochastic behaviour of this fault. Required
     #: so a run is reproducible from its manifest.
     seed: Annotated[int, Field(ge=0, le=2**31 - 1)] = 0
-    params: dict[str, float] = Field(default_factory=dict)
+    params: dict[str, FaultParam] = Field(default_factory=dict)
+    """Fault parameters. Numbers, booleans or short identifiers (e.g. the id of
+    an obstacle a fault replaces). Never nested structures."""
     #: What must remain true while the fault is active. Surfaced in the UI so a
     #: run that violates it is obviously wrong rather than quietly plausible.
     expected_invariant: str = Field(min_length=1, max_length=200)

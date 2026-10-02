@@ -54,7 +54,10 @@ asyncio_default_fixture_loop_scope = "function"
 filterwarnings = ["error::DeprecationWarning:niharamesh.*"]
 
 [tool.ruff]
-line-length = 100
+# 110 rather than the usual 88/100: this codebase carries long, explanatory
+# message strings (validation remedies, invariant statements) that are far more
+# readable unwrapped than split across concatenation fragments.
+line-length = 110
 target-version = "py312"
 src = ["src", "tests"]
 
@@ -71,6 +74,10 @@ ignore = [
 [tool.ruff.lint.per-file-ignores]
 "tests/**" = ["S", "B011"]
 "scripts/**" = ["S"]
+# Simulation sensor noise, battery model and fault schedules are pseudo-random by
+# nature and must be reproducible from a seed. Cryptographic randomness is never
+# used anywhere in this project, so the S311 heuristic does not apply.
+"src/niharamesh/clocks/__init__.py" = ["S311"]
 
 [tool.ruff.lint.flake8-tidy-imports]
 ban-relative-imports = "all"

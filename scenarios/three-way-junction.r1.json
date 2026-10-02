@@ -1,0 +1,809 @@
+{
+  "description": "Three robots, one junction zone on the centre cross aisle, one grant at a time.",
+  "faults": [],
+  "intent": {
+    "expect": "Right of way follows canonical acquisition order and every acquisition is inspectable in the zone inspector.",
+    "expected_failure_reason": "",
+    "goal": "Three transports cross one junction zone with a complete, explainable right of way."
+  },
+  "kind": "nominal",
+  "map": {
+    "berths": [
+      {
+        "capacity": 2,
+        "id": "brt-00",
+        "pose": {
+          "theta": 0.0,
+          "x": 2.5,
+          "y": 1.3
+        }
+      },
+      {
+        "capacity": 2,
+        "id": "brt-01",
+        "pose": {
+          "theta": 0.0,
+          "x": 2.5,
+          "y": 6.9
+        }
+      },
+      {
+        "capacity": 2,
+        "id": "brt-02",
+        "pose": {
+          "theta": 0.0,
+          "x": 2.5,
+          "y": 11.9
+        }
+      },
+      {
+        "capacity": 2,
+        "id": "brt-03",
+        "pose": {
+          "theta": 0.0,
+          "x": 2.5,
+          "y": 17.1
+        }
+      },
+      {
+        "capacity": 2,
+        "id": "brt-04",
+        "pose": {
+          "theta": 0.0,
+          "x": 7.4,
+          "y": 1.3
+        }
+      },
+      {
+        "capacity": 2,
+        "id": "brt-05",
+        "pose": {
+          "theta": 0.0,
+          "x": 7.4,
+          "y": 6.9
+        }
+      },
+      {
+        "capacity": 2,
+        "id": "brt-06",
+        "pose": {
+          "theta": 0.0,
+          "x": 7.4,
+          "y": 11.9
+        }
+      },
+      {
+        "capacity": 2,
+        "id": "brt-07",
+        "pose": {
+          "theta": 0.0,
+          "x": 7.4,
+          "y": 17.1
+        }
+      },
+      {
+        "capacity": 2,
+        "id": "brt-08",
+        "pose": {
+          "theta": 0.0,
+          "x": 10.4,
+          "y": 1.3
+        }
+      },
+      {
+        "capacity": 2,
+        "id": "brt-09",
+        "pose": {
+          "theta": 0.0,
+          "x": 10.4,
+          "y": 6.9
+        }
+      },
+      {
+        "capacity": 2,
+        "id": "brt-10",
+        "pose": {
+          "theta": 0.0,
+          "x": 10.4,
+          "y": 11.9
+        }
+      },
+      {
+        "capacity": 2,
+        "id": "brt-11",
+        "pose": {
+          "theta": 0.0,
+          "x": 10.4,
+          "y": 17.1
+        }
+      },
+      {
+        "capacity": 2,
+        "id": "brt-12",
+        "pose": {
+          "theta": 0.0,
+          "x": 12.0,
+          "y": 1.3
+        }
+      },
+      {
+        "capacity": 2,
+        "id": "brt-13",
+        "pose": {
+          "theta": 0.0,
+          "x": 12.0,
+          "y": 6.9
+        }
+      },
+      {
+        "capacity": 2,
+        "id": "brt-14",
+        "pose": {
+          "theta": 0.0,
+          "x": 12.0,
+          "y": 11.9
+        }
+      },
+      {
+        "capacity": 2,
+        "id": "brt-15",
+        "pose": {
+          "theta": 0.0,
+          "x": 12.0,
+          "y": 17.1
+        }
+      },
+      {
+        "capacity": 2,
+        "id": "brt-16",
+        "pose": {
+          "theta": 0.0,
+          "x": 15.0,
+          "y": 1.3
+        }
+      },
+      {
+        "capacity": 2,
+        "id": "brt-17",
+        "pose": {
+          "theta": 0.0,
+          "x": 15.0,
+          "y": 6.9
+        }
+      },
+      {
+        "capacity": 2,
+        "id": "brt-18",
+        "pose": {
+          "theta": 0.0,
+          "x": 15.0,
+          "y": 11.9
+        }
+      },
+      {
+        "capacity": 2,
+        "id": "brt-19",
+        "pose": {
+          "theta": 0.0,
+          "x": 15.0,
+          "y": 17.1
+        }
+      },
+      {
+        "capacity": 2,
+        "id": "brt-20",
+        "pose": {
+          "theta": 0.0,
+          "x": 16.6,
+          "y": 1.3
+        }
+      },
+      {
+        "capacity": 2,
+        "id": "brt-21",
+        "pose": {
+          "theta": 0.0,
+          "x": 16.6,
+          "y": 6.9
+        }
+      },
+      {
+        "capacity": 2,
+        "id": "brt-22",
+        "pose": {
+          "theta": 0.0,
+          "x": 16.6,
+          "y": 11.9
+        }
+      },
+      {
+        "capacity": 2,
+        "id": "brt-23",
+        "pose": {
+          "theta": 0.0,
+          "x": 16.6,
+          "y": 17.1
+        }
+      },
+      {
+        "capacity": 2,
+        "id": "brt-24",
+        "pose": {
+          "theta": 0.0,
+          "x": 19.6,
+          "y": 1.3
+        }
+      },
+      {
+        "capacity": 2,
+        "id": "brt-25",
+        "pose": {
+          "theta": 0.0,
+          "x": 19.6,
+          "y": 6.9
+        }
+      },
+      {
+        "capacity": 2,
+        "id": "brt-26",
+        "pose": {
+          "theta": 0.0,
+          "x": 19.6,
+          "y": 11.9
+        }
+      },
+      {
+        "capacity": 2,
+        "id": "brt-27",
+        "pose": {
+          "theta": 0.0,
+          "x": 19.6,
+          "y": 17.1
+        }
+      },
+      {
+        "capacity": 2,
+        "id": "brt-28",
+        "pose": {
+          "theta": 0.0,
+          "x": 24.0,
+          "y": 1.3
+        }
+      },
+      {
+        "capacity": 2,
+        "id": "brt-29",
+        "pose": {
+          "theta": 0.0,
+          "x": 24.0,
+          "y": 6.9
+        }
+      },
+      {
+        "capacity": 2,
+        "id": "brt-30",
+        "pose": {
+          "theta": 0.0,
+          "x": 24.0,
+          "y": 11.9
+        }
+      },
+      {
+        "capacity": 2,
+        "id": "brt-31",
+        "pose": {
+          "theta": 0.0,
+          "x": 24.0,
+          "y": 17.1
+        }
+      }
+    ],
+    "boundary": {
+      "max_x": 26.0,
+      "max_y": 18.0,
+      "min_x": 0.0,
+      "min_y": 0.0
+    },
+    "directed_routes": [],
+    "grid_resolution_m": 0.1,
+    "map_id": "map-junction",
+    "name": "Three-way junction",
+    "nominal_aisle_width_m": 1.4,
+    "obstacles": [
+      {
+        "dynamic": false,
+        "id": "shelf-00",
+        "kind": "shelf",
+        "length_m": 3.2,
+        "pose": {
+          "theta": 0.0,
+          "x": 6.6,
+          "y": 4.4
+        },
+        "width_m": 3.6
+      },
+      {
+        "dynamic": false,
+        "id": "shelf-01",
+        "kind": "shelf",
+        "length_m": 3.2,
+        "pose": {
+          "theta": 0.0,
+          "x": 6.6,
+          "y": 9.4
+        },
+        "width_m": 3.6
+      },
+      {
+        "dynamic": false,
+        "id": "shelf-02",
+        "kind": "shelf",
+        "length_m": 3.2,
+        "pose": {
+          "theta": 0.0,
+          "x": 6.6,
+          "y": 14.4
+        },
+        "width_m": 3.6
+      },
+      {
+        "dynamic": false,
+        "id": "shelf-10",
+        "kind": "shelf",
+        "length_m": 3.2,
+        "pose": {
+          "theta": 0.0,
+          "x": 11.2,
+          "y": 4.4
+        },
+        "width_m": 3.6
+      },
+      {
+        "dynamic": false,
+        "id": "shelf-11",
+        "kind": "shelf",
+        "length_m": 3.2,
+        "pose": {
+          "theta": 0.0,
+          "x": 11.2,
+          "y": 9.4
+        },
+        "width_m": 3.6
+      },
+      {
+        "dynamic": false,
+        "id": "shelf-12",
+        "kind": "shelf",
+        "length_m": 3.2,
+        "pose": {
+          "theta": 0.0,
+          "x": 11.2,
+          "y": 14.4
+        },
+        "width_m": 3.6
+      },
+      {
+        "dynamic": false,
+        "id": "shelf-20",
+        "kind": "shelf",
+        "length_m": 3.2,
+        "pose": {
+          "theta": 0.0,
+          "x": 15.799999999999999,
+          "y": 4.4
+        },
+        "width_m": 3.6
+      },
+      {
+        "dynamic": false,
+        "id": "shelf-21",
+        "kind": "shelf",
+        "length_m": 3.2,
+        "pose": {
+          "theta": 0.0,
+          "x": 15.799999999999999,
+          "y": 9.4
+        },
+        "width_m": 3.6
+      },
+      {
+        "dynamic": false,
+        "id": "shelf-22",
+        "kind": "shelf",
+        "length_m": 3.2,
+        "pose": {
+          "theta": 0.0,
+          "x": 15.799999999999999,
+          "y": 14.4
+        },
+        "width_m": 3.6
+      },
+      {
+        "dynamic": false,
+        "id": "shelf-30",
+        "kind": "shelf",
+        "length_m": 3.2,
+        "pose": {
+          "theta": 0.0,
+          "x": 20.400000000000002,
+          "y": 4.4
+        },
+        "width_m": 3.6
+      },
+      {
+        "dynamic": false,
+        "id": "shelf-31",
+        "kind": "shelf",
+        "length_m": 3.2,
+        "pose": {
+          "theta": 0.0,
+          "x": 20.400000000000002,
+          "y": 9.4
+        },
+        "width_m": 3.6
+      },
+      {
+        "dynamic": false,
+        "id": "shelf-32",
+        "kind": "shelf",
+        "length_m": 3.2,
+        "pose": {
+          "theta": 0.0,
+          "x": 20.400000000000002,
+          "y": 14.4
+        },
+        "width_m": 3.6
+      }
+    ],
+    "revision": 1,
+    "schema_version": "1.0.0",
+    "stations": [
+      {
+        "capacity": 1,
+        "id": "stn-pick-a",
+        "kind": "pickup",
+        "pose": {
+          "theta": 0.0,
+          "x": 2.5,
+          "y": 2.0
+        },
+        "service_time_s": 4.0
+      },
+      {
+        "capacity": 1,
+        "id": "stn-pick-b",
+        "kind": "pickup",
+        "pose": {
+          "theta": 0.0,
+          "x": 2.5,
+          "y": 9.0
+        },
+        "service_time_s": 4.0
+      },
+      {
+        "capacity": 1,
+        "id": "stn-pick-c",
+        "kind": "pickup",
+        "pose": {
+          "theta": 0.0,
+          "x": 2.5,
+          "y": 15.5
+        },
+        "service_time_s": 4.0
+      },
+      {
+        "capacity": 1,
+        "id": "stn-drop-a",
+        "kind": "drop",
+        "pose": {
+          "theta": 0.0,
+          "x": 24.2,
+          "y": 2.0
+        },
+        "service_time_s": 4.0
+      },
+      {
+        "capacity": 1,
+        "id": "stn-drop-b",
+        "kind": "drop",
+        "pose": {
+          "theta": 0.0,
+          "x": 24.2,
+          "y": 9.0
+        },
+        "service_time_s": 4.0
+      },
+      {
+        "capacity": 1,
+        "id": "stn-drop-c",
+        "kind": "drop",
+        "pose": {
+          "theta": 0.0,
+          "x": 24.2,
+          "y": 15.5
+        },
+        "service_time_s": 4.0
+      },
+      {
+        "capacity": 1,
+        "id": "stn-charge-a",
+        "kind": "charge",
+        "pose": {
+          "theta": 0.0,
+          "x": 24.2,
+          "y": 17.2
+        },
+        "service_time_s": 30.0
+      }
+    ],
+    "stop_lines": [
+      {
+        "approach": "increasing",
+        "end": [
+          14.6,
+          10.9
+        ],
+        "id": "sl-junction-in",
+        "start": [
+          12.4,
+          10.9
+        ],
+        "zone_id": "zn-junction"
+      },
+      {
+        "approach": "increasing",
+        "end": [
+          14.6,
+          12.9
+        ],
+        "id": "sl-junction-out",
+        "start": [
+          12.4,
+          12.9
+        ],
+        "zone_id": "zn-junction"
+      }
+    ],
+    "zones": [
+      {
+        "allowed_movement": [
+          "forward",
+          "cross"
+        ],
+        "description": "exclusive junction segment",
+        "entry_pose": {
+          "theta": 1.5707963267948966,
+          "x": 13.5,
+          "y": 10.9
+        },
+        "exit_berth_id": "brt-19",
+        "exit_pose": {
+          "theta": 1.5707963267948966,
+          "x": 13.5,
+          "y": 12.9
+        },
+        "id": "zn-junction",
+        "kind": "junction",
+        "members": [],
+        "one_way_heading_rad": null,
+        "protected_extent": [
+          2.2170679286326185,
+          2.2170679286326185
+        ],
+        "protected_origin": [
+          12.39146603568369,
+          10.79146603568369
+        ],
+        "queue_berth_id": "brt-17",
+        "stop_line_in": null,
+        "stop_line_out": null
+      }
+    ]
+  },
+  "max_sim_time_s": 600.0,
+  "name": "Three-way junction contention",
+  "policy": {
+    "assignment": "local_auction",
+    "comparison_mode": "coordination_only",
+    "coordination": "canonical_sequential",
+    "fault_seed": 33,
+    "planner_seed": 11,
+    "routing": "blocked_aware",
+    "sensor_seed": 22
+  },
+  "revision": 1,
+  "robots": [
+    {
+      "capabilities": [
+        "carry_payload",
+        "dock"
+      ],
+      "footprint": {
+        "length_m": 0.6,
+        "payload_length_m": 0.3,
+        "payload_offset_m": 0.0,
+        "payload_width_m": 0.24,
+        "turning_radius_m": 0.32,
+        "width_m": 0.4
+      },
+      "max_angular_radps": 1.0,
+      "max_linear_mps": 0.4,
+      "model": "niharamesh-amr-600",
+      "robot_id": "amr-01",
+      "schema_version": "1.0.0"
+    },
+    {
+      "capabilities": [
+        "carry_payload",
+        "dock"
+      ],
+      "footprint": {
+        "length_m": 0.6,
+        "payload_length_m": 0.3,
+        "payload_offset_m": 0.0,
+        "payload_width_m": 0.24,
+        "turning_radius_m": 0.32,
+        "width_m": 0.4
+      },
+      "max_angular_radps": 1.0,
+      "max_linear_mps": 0.4,
+      "model": "niharamesh-amr-600",
+      "robot_id": "amr-02",
+      "schema_version": "1.0.0"
+    },
+    {
+      "capabilities": [
+        "carry_payload",
+        "dock"
+      ],
+      "footprint": {
+        "length_m": 0.6,
+        "payload_length_m": 0.3,
+        "payload_offset_m": 0.0,
+        "payload_width_m": 0.24,
+        "turning_radius_m": 0.32,
+        "width_m": 0.4
+      },
+      "max_angular_radps": 1.0,
+      "max_linear_mps": 0.4,
+      "model": "niharamesh-amr-600",
+      "robot_id": "amr-03",
+      "schema_version": "1.0.0"
+    }
+  ],
+  "scenario_id": "three-way-junction",
+  "schema_version": "1.0.0",
+  "seed": 20260101,
+  "simulation": {
+    "actuator": {
+      "accel_mps2": 0.5,
+      "angular_accel_radps2": 1.5,
+      "command_ttl_s": 0.4,
+      "decel_mps2": 0.8,
+      "max_angular_radps": 1.0,
+      "max_linear_mps": 0.4
+    },
+    "battery": {
+      "drain_per_metre_c": 4e-05,
+      "drain_per_second_idle_c": 8e-06,
+      "service_drain_c": 0.0005,
+      "source": "simulated",
+      "start_fraction": 0.92
+    },
+    "features": {
+      "blocked_aware_routing": true,
+      "disable_safety_gate": false,
+      "fairness_aware_priority": true,
+      "task_reassignment": true,
+      "temporal_planning": false,
+      "timer_expiry_occupancy": false,
+      "unsafe_flags": [],
+      "unsafe_research_variant": false
+    },
+    "physical_actuation_enabled": false,
+    "physics_step_hz": 20,
+    "protocol": {
+      "cancel_timeout_s": 1.5,
+      "control_period_s": 0.05,
+      "freshness_horizon_s": 1.0,
+      "heartbeat_period_s": 0.2,
+      "intent_publish_period_s": 0.5,
+      "intent_validity_s": 3.0,
+      "queue_tiebreak_s": 0.0,
+      "release_timeout_s": 5.0,
+      "solicit_timeout_s": 0.8,
+      "state_publish_period_s": 0.1
+    },
+    "schema_version": "1.0.0",
+    "sensor": {
+      "angular_resolution_rad": 0.0436,
+      "dropout_probability": 0.02,
+      "field_of_view_rad": 4.712,
+      "heading_sigma_rad": 0.01,
+      "observation_latency_s": 0.1,
+      "position_sigma_m": 0.02,
+      "range_m": 3.0,
+      "range_noise_m": 0.02
+    },
+    "state_publish_hz": 10,
+    "stopping": {
+      "braking_decel_mps2": 0.8,
+      "extra_margin_m": 0.1,
+      "max_speed_mps": 0.4,
+      "reaction_time_s": 0.3
+    }
+  },
+  "starts": [
+    {
+      "assigned_task_id": "t-junction-0",
+      "holding_task_id": null,
+      "pose": {
+        "theta": 0.0,
+        "x": 2.5,
+        "y": 6.9
+      },
+      "robot_id": "amr-01"
+    },
+    {
+      "assigned_task_id": "t-junction-1",
+      "holding_task_id": null,
+      "pose": {
+        "theta": -3.141592653589793,
+        "x": 24.0,
+        "y": 11.9
+      },
+      "robot_id": "amr-02"
+    },
+    {
+      "assigned_task_id": "t-junction-2",
+      "holding_task_id": null,
+      "pose": {
+        "theta": 1.5707963267948966,
+        "x": 13.5,
+        "y": 1.3
+      },
+      "robot_id": "amr-03"
+    }
+  ],
+  "tasks": [
+    {
+      "drop_station_id": "stn-drop-b",
+      "pickup_station_id": "stn-pick-a",
+      "priority": 100,
+      "release_at_s": 0.0,
+      "required_capabilities": [
+        "carry_payload"
+      ],
+      "schema_version": "1.0.0",
+      "service_time_s": 3.0,
+      "task_id": "t-junction-0",
+      "weight_kg": 5.0
+    },
+    {
+      "drop_station_id": "stn-drop-c",
+      "pickup_station_id": "stn-pick-b",
+      "priority": 100,
+      "release_at_s": 0.0,
+      "required_capabilities": [
+        "carry_payload"
+      ],
+      "schema_version": "1.0.0",
+      "service_time_s": 3.0,
+      "task_id": "t-junction-1",
+      "weight_kg": 5.0
+    },
+    {
+      "drop_station_id": "stn-drop-a",
+      "pickup_station_id": "stn-pick-c",
+      "priority": 100,
+      "release_at_s": 0.0,
+      "required_capabilities": [
+        "carry_payload"
+      ],
+      "schema_version": "1.0.0",
+      "service_time_s": 3.0,
+      "task_id": "t-junction-2",
+      "weight_kg": 5.0
+    }
+  ]
+}

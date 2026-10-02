@@ -134,6 +134,15 @@ class GateContext:
     swept_body: OrientedBox | None = None
     #: Local obstacle observations the robot has actually made.
     obstacle_distance_m: float | None = None
+    #: Declared minimum separation this body must keep from a **sensed peer**.
+    #:
+    #: ``None`` disables the peer-separation check, which is the correct default
+    #: only for a decision-layer fixture that has no sensing model. A real run must
+    #: supply it, because a gate that cannot see a peer is not a safety gate.
+    #:
+    #: It is *this robot's own* declared body geometry, twice over -- a bound, not a
+    #: measurement, and never a peer's true pose.
+    peer_separation_m: float | None = None
     #: Whether a release or delivery is in progress (station service).
     servicing: bool = False
 
@@ -291,6 +300,10 @@ class SafetyGate:
         if refusal is not None:
             return refusal
 
+        refusal = self._peer_refusal(command, ctx)
+        if refusal is not None:
+            return refusal
+
         if ctx.battery_fraction is not None and ctx.battery_fraction < self._minimum_battery:
             return SafetyDecision(False, StopReason.ACTUATOR_FAULT, "battery_below_reserve")
 
@@ -352,6 +365,67 @@ class SafetyGate:
                 f"obstacle_{ctx.obstacle_distance_m:.3f}m<{clearance:.3f}m",
             )
         return None
+
+    def _peer_refusal(self, command: MotionCommand, ctx: GateContext) -> SafetyDecision | None:
+        """Refuse motion that would close on a **sensed** peer below the declared
+        separation.
+
+        This check exists because the static-geometry check cannot see a peer, and
+        the scalar forward-clearance check is the *wrong quantity* for one. That
+        field is the nearest ray inside a +/-90 degree cone, compared against a
+        longitudinal braking budget: the right question for a shelf ahead, and the
+        wrong one for a robot beside the nose. A peer 0.5 m off to the side at
+        90 degrees is inside the cone and outside the budget, so the gate permitted
+        motion straight into it.
+
+        Measured on ``dynamic-arrivals`` before this check existed: 556 overlapping
+        physics samples between ``amr-01`` and ``amr-02``, first at 62.2 s, tightest
+        centre distance 0.543 m against a declared separation of 0.9 m, on the
+        authored map with no zone to arbitrate the aisle. See
+        ``tests/integration/test_inter_robot_separation.py``.
+
+        Three properties make this conservative in the right direction and usable:
+
+        * **Sensed, not true.** Only rays the robot's own scan reported, which is
+          the only peer information an agent is allowed to have.
+        * **Radial, not longitudinal.** A peer beside the robot counts as much as
+          one ahead, because "no two bodies in the same space" has no direction.
+        * **Closing, not absolute.** A command that cannot reduce the separation is
+          permitted. A robot already stopped beside a peer -- two robots at a
+          station, a queue -- therefore does not freeze permanently, which was the
+          over-refusal that froze two of three robots in Milestone A.
+
+        Refusing here is not a substitute for the zone protocol. It is the last
+        line, and it is a *local* one: a robot that loses sensing entirely is
+        permitted to move, which is exactly why zone authority exists.
+        """
+        separation = ctx.peer_separation_m
+        if separation is None or separation <= 0.0:
+            return None
+        peers = [ray for ray in ctx.observation.sensor.rays if ray.kind == "robot"]
+        if not peers:
+            return None  # no peer sensed: absence of evidence, not evidence of safety
+        reach, spin = self._motion_budget(command, ctx)
+        # A rotation sweeps the body's corner outward, so a spin is a closing motion
+        # even at zero translation. Counted at the same radius as translation.
+        closing_reach = reach + min(separation, spin * self._map_corner_radius_m(command, ctx))
+        for ray in peers:
+            if ray.distance_m - closing_reach >= separation:
+                continue
+            return SafetyDecision(
+                False,
+                StopReason.OBSTACLE_IN_PATH,
+                f"peer_{ray.distance_m:.3f}m_within_separation_{separation:.3f}m",
+            )
+        return None
+
+    def _map_corner_radius_m(self, command: MotionCommand, ctx: GateContext) -> float:
+        """Radius at which this command's rotation moves the body's corner."""
+        del command
+        body = ctx.occupied_box
+        if body is None:
+            return 0.0
+        return float(max(body.length, body.width)) / 2.0
 
     def _overlaps_static(self, box: OrientedBox) -> bool:
         return any(sat_overlap(box, obstacle) for obstacle in self._map_obstacles())

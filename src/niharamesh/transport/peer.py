@@ -30,16 +30,35 @@ is therefore not "the socket is open": every peer is expected to publish
 periodic clock probes, and a peer whose socket is open while nothing arrives for
 longer than ``silence_threshold_ns`` is reported ``connected_silent`` with
 ``availability == "unavailable"``. It is never rendered as "no traffic".
+
+Absent evidence is ``None``, not ``0``
+--------------------------------------
+``last_rx_ns``, ``last_tx_ns`` and ``silence_ms`` report ``None`` when the event
+they describe has not happened. They do not report ``0``: ``MonotonicClock`` wraps
+``time.monotonic``, which resolves to a millisecond on Windows, so the first real
+measurement on a fresh link can legitimately *be* ``0`` - and a zero sentinel
+turns a received message into a reported silence.
+
+Diagnosis is not health
+-----------------------
+:meth:`PeerTransportServer.health` answers "what is true now".
+:meth:`PeerTransportServer.link_trace` answers "what happened, and why": every
+link attach, detach, clean EOF, refused dial, escaped exception and abnormally
+finished worker, in a bounded ring. The counters alone cannot tell a link that is
+between reconnect attempts from one whose reconnect loop is dead, and a worker
+that dies on an unhandled exception used to leave no trace at all.
 """
 
 from __future__ import annotations
 
 import asyncio
+import traceback
 from collections import deque
 from collections.abc import AsyncIterator, Callable, Coroutine, Mapping
 from contextlib import suppress
 from dataclasses import dataclass, field
 from enum import StrEnum
+from functools import partial
 from typing import Any, Final
 
 from niharamesh.clocks import Clock, MonotonicClock, SeededStreams
@@ -76,6 +95,8 @@ __all__ = [
     "DEFAULT_SILENCE_THRESHOLD_NS",
     "REPLACEABLE_KINDS",
     "BoundedInbox",
+    "LinkEvent",
+    "LinkTrace",
     "PeerClient",
     "PeerDeclaration",
     "PeerStatus",
@@ -99,6 +120,113 @@ REPLACEABLE_KINDS: Final[frozenset[str]] = frozenset(
 )
 
 _LOOPBACK_HOSTS: Final[frozenset[str]] = frozenset({"127.0.0.1", "::1", "localhost"})
+
+
+def _latest(*stamps: int | None) -> int | None:
+    """The most recent of the timestamps that exist, or ``None`` if none do.
+
+    Timestamps here come from :class:`~niharamesh.clocks.MonotonicClock`, whose
+    resolution on Windows is one millisecond, so ``0`` is a legal measurement and
+    must not double as the "absent" marker.
+    """
+    present = [stamp for stamp in stamps if stamp is not None]
+    return max(present) if present else None
+
+
+#: Diagnostic ring capacity. Bounded on purpose: an unbounded event log inside
+#: the transport would be the very defect this module is written against.
+_TRACE_CAPACITY: Final[int] = 128
+#: Per-failure traceback text retained, so a health report can name the bug.
+_TRACEBACK_CHARS: Final[int] = 2000
+
+
+@dataclass(frozen=True, slots=True)
+class LinkEvent:
+    """One observed peer-link lifecycle fact, in the local monotonic domain."""
+
+    seq: int
+    at_ns: int
+    scope: str
+    peer_id: str
+    detail: str
+
+    def as_dict(self) -> dict[str, object]:
+        return {
+            "seq": self.seq,
+            "at_ns": self.at_ns,
+            "scope": self.scope,
+            "peer_id": self.peer_id,
+            "detail": self.detail,
+        }
+
+
+class LinkTrace:
+    """Bounded, in-memory record of peer-link lifecycle events.
+
+    This exists because the counters in :meth:`PeerClient.health` answer "what
+    is true now" but not "why". A link that reports ``disconnected`` with
+    ``connect_attempts == 1`` is indistinguishable from a link whose reconnect
+    loop is inside its first backoff sleep, a link retrying against a dead
+    listener, and a link whose worker died on an unhandled exception - and those
+    three have three different fixes.
+
+    It is a ring: the newest ``capacity`` events survive, older ones are counted
+    in :attr:`evicted`. Memory is bounded by construction and nothing here blocks
+    or allocates per frame.
+    """
+
+    __slots__ = ("_capacity", "_events", "_failures", "_seq")
+
+    def __init__(self, capacity: int = _TRACE_CAPACITY) -> None:
+        self._capacity = max(1, capacity)
+        self._events: deque[LinkEvent] = deque(maxlen=self._capacity)
+        self._failures: list[dict[str, object]] = []
+        self._seq = 0
+
+    @property
+    def capacity(self) -> int:
+        return self._capacity
+
+    @property
+    def recorded(self) -> int:
+        return self._seq
+
+    @property
+    def evicted(self) -> int:
+        """Events dropped from the ring. Non-zero means the log is not complete."""
+        return max(0, self._seq - len(self._events))
+
+    @property
+    def events(self) -> tuple[LinkEvent, ...]:
+        return tuple(self._events)
+
+    @property
+    def failures(self) -> tuple[dict[str, object], ...]:
+        """Worker tasks that ended abnormally, and what ended them."""
+        return tuple(self._failures)
+
+    def record(self, *, at_ns: int, scope: str, peer_id: str = "", detail: str = "") -> None:
+        self._seq += 1
+        self._events.append(
+            LinkEvent(seq=self._seq, at_ns=at_ns, scope=scope, peer_id=peer_id, detail=detail)
+        )
+
+    def record_exception(self, *, at_ns: int, scope: str, peer_id: str, exc: BaseException) -> None:
+        """Record an escaping exception *with* its traceback, then keep it bounded."""
+        text = "".join(traceback.format_exception(type(exc), exc, exc.__traceback__))
+        self.record(
+            at_ns=at_ns,
+            scope=scope,
+            peer_id=peer_id,
+            detail=f"{type(exc).__name__}: {exc}\n{text[-_TRACEBACK_CHARS:]}",
+        )
+
+    def record_failure(self, *, at_ns: int, scope: str, peer_id: str, summary: str) -> None:
+        """Record a worker task that ended abnormally. Bounded, like the ring."""
+        self.record(at_ns=at_ns, scope=scope, peer_id=peer_id, detail=summary)
+        if len(self._failures) >= _TRACE_CAPACITY:
+            del self._failures[0]
+        self._failures.append({"at_ns": at_ns, "scope": scope, "peer_id": peer_id, "summary": summary})
 
 
 class PeerStatus(StrEnum):
@@ -249,6 +377,7 @@ class PeerClient:
         frames: FrameStats,
         streams: SeededStreams,
         outbox_capacity: int = DEFAULT_OUTBOX_CAPACITY,
+        trace: LinkTrace | None = None,
     ) -> None:
         self._peer_id = peer_id
         host, port = endpoint.address()
@@ -257,14 +386,19 @@ class PeerClient:
         self._clock = clock
         self._frames = frames
         self._streams = streams
+        self._trace: LinkTrace = trace if trace is not None else LinkTrace()
         self._outbox_capacity = max(1, outbox_capacity)
         self._outbox: deque[bytes] = deque()
         self._writer: asyncio.StreamWriter | None = None
         self._connected = False
-        self._connected_at_ns = 0
+        #: ``None`` means "no such event yet", never ``0``. ``MonotonicClock`` is
+        #: backed by ``time.monotonic``, which on Windows has millisecond
+        #: resolution, so a first measurement can legitimately be ``0``. A ``0``
+        #: sentinel would report that as "nothing was ever received".
+        self._connected_at_ns: int | None = None
         self._local_port = 0
-        self._last_rx_ns = 0
-        self._last_tx_ns = 0
+        self._last_rx_ns: int | None = None
+        self._last_tx_ns: int | None = None
         self.dropped = 0
         self._tx_failures = 0
         self._connect_attempts = 0
@@ -288,9 +422,16 @@ class PeerClient:
         backoff_ns = _BACKOFF_MIN_NS
         while not self._stop_requested():
             self._connect_attempts += 1
+            attempt = self._connect_attempts
             try:
                 reader, writer = await asyncio.open_connection(self._host, self._port)
-            except (OSError, ConnectionError):
+            except (OSError, ConnectionError) as exc:
+                self._trace.record(
+                    at_ns=self._clock.now_ns(),
+                    scope="dial_refused",
+                    peer_id=self._peer_id,
+                    detail=f"attempt={attempt} {type(exc).__name__}: {exc}",
+                )
                 if self._stop_requested():
                     return
                 await asyncio.sleep(self._backoff_s(backoff_ns))
@@ -300,17 +441,44 @@ class PeerClient:
             self._attach(writer)
             self._reconnects += 1
             backoff_ns = _BACKOFF_MIN_NS
+            self._trace.record(
+                at_ns=self._clock.now_ns(),
+                scope="attached",
+                peer_id=self._peer_id,
+                detail=f"attempt={attempt} from_port={self._local_port}",
+            )
             pump = asyncio.ensure_future(self._pump())
+            reason = "read_loop_returned"
             try:
                 await self._read_loop(reader, on_frame)
             except asyncio.CancelledError:
+                self._trace.record(
+                    at_ns=self._clock.now_ns(),
+                    scope="run_cancelled",
+                    peer_id=self._peer_id,
+                    detail=f"attempt={attempt}",
+                )
                 raise
-            except (OSError, ConnectionError, FrameError):
-                pass  # link died; the loop below reconnects with a longer backoff
+            except (OSError, ConnectionError, FrameError) as exc:
+                reason = f"link_died:{type(exc).__name__}"
+            except BaseException as exc:
+                self._trace.record_exception(
+                    at_ns=self._clock.now_ns(),
+                    scope="run_escaped",
+                    peer_id=self._peer_id,
+                    exc=exc,
+                )
+                raise
             finally:
                 pump.cancel()
                 await asyncio.gather(pump, return_exceptions=True)
                 self._detach()
+            self._trace.record(
+                at_ns=self._clock.now_ns(),
+                scope="detached",
+                peer_id=self._peer_id,
+                detail=f"attempt={attempt} reason={reason} outbox={len(self._outbox)}",
+            )
             if self._stop_requested():
                 return
             await asyncio.sleep(self._backoff_s(backoff_ns))
@@ -326,6 +494,12 @@ class PeerClient:
         a session that has since changed would be a safety bug, not resilience.
         """
         self._stopping = True
+        self._trace.record(
+            at_ns=self._clock.now_ns(),
+            scope="client_stop",
+            peer_id=self._peer_id,
+            detail=f"outbox={len(self._outbox)}",
+        )
         writer = self._writer
         self._detach()
         self.dropped += len(self._outbox)
@@ -354,13 +528,20 @@ class PeerClient:
         now_ns: int,
         silence_threshold_ns: int,
         inbound_connected: bool,
-        inbound_rx_ns: int,
+        inbound_rx_ns: int | None,
     ) -> dict[str, object]:
-        """Per-peer state, including the connected-but-silent distinction."""
+        """Per-peer state, including the connected-but-silent distinction.
+
+        "No evidence yet" is reported as ``None``, never as ``0``: the monotonic
+        clock has millisecond resolution on Windows, so the first real measurement
+        on a link can *be* ``0``, and a zero sentinel would report that as silence
+        that never happened (``AGENTS.md`` rule 10 - a missing metric is
+        unavailable, not zero).
+        """
         connected = self._connected or inbound_connected
-        last_rx = max(self._last_rx_ns, inbound_rx_ns)
-        last_activity_ns = max(last_rx, self._last_tx_ns, self._connected_at_ns)
-        silence_ns = max(0, now_ns - last_activity_ns) if last_activity_ns else None
+        last_rx = _latest(self._last_rx_ns, inbound_rx_ns)
+        last_activity_ns = _latest(last_rx, self._last_tx_ns, self._connected_at_ns)
+        silence_ns = None if last_activity_ns is None else max(0, now_ns - last_activity_ns)
         if not connected:
             status = PeerStatus.DISCONNECTED
         elif silence_ns is not None and silence_ns > silence_threshold_ns:
@@ -407,7 +588,7 @@ class PeerClient:
         writer = self._writer
         self._writer = None
         self._connected = False
-        self._connected_at_ns = 0
+        self._connected_at_ns = None
         self._local_port = 0
         if writer is not None:
             with suppress(OSError, ConnectionError):
@@ -415,16 +596,33 @@ class PeerClient:
 
     async def _pump(self) -> None:
         """Drain the outbox in order. One writer at a time, so ordering holds."""
-        while not self._stop_requested():
-            if not self._outbox:
-                await asyncio.sleep(_DRAIN_INTERVAL_S)
-                continue
-            if not self._connected:
-                await asyncio.sleep(_BACKOFF_MIN_NS / 1_000_000_000)
-                continue
-            if not await self.write(self._outbox[0]):
-                return
-            self._outbox.popleft()
+        try:
+            while not self._stop_requested():
+                if not self._outbox:
+                    await asyncio.sleep(_DRAIN_INTERVAL_S)
+                    continue
+                if not self._connected:
+                    await asyncio.sleep(_BACKOFF_MIN_NS / 1_000_000_000)
+                    continue
+                if not await self.write(self._outbox[0]):
+                    self._trace.record(
+                        at_ns=self._clock.now_ns(),
+                        scope="pump_stopped",
+                        peer_id=self._peer_id,
+                        detail=f"write_failed outbox={len(self._outbox)}",
+                    )
+                    return
+                self._outbox.popleft()
+        except asyncio.CancelledError:
+            raise
+        except BaseException as exc:
+            self._trace.record_exception(
+                at_ns=self._clock.now_ns(),
+                scope="pump_escaped",
+                peer_id=self._peer_id,
+                exc=exc,
+            )
+            raise
 
     async def write(self, frame: bytes) -> bool:
         """Write one framed payload, preserving per-peer ordering."""
@@ -511,6 +709,7 @@ class PeerTransportServer:
         self._clock_sync: cs.ClockSync | None = None
         self._listening_port = 0
         self._outbound_seq = 0
+        self._trace = LinkTrace()
 
     # ------------------------------------------------------------- properties
 
@@ -576,10 +775,11 @@ class PeerTransportServer:
                 clock=self._clock,
                 frames=self._frames,
                 streams=self._streams,
+                trace=self._trace,
             )
         for client in self._clients.values():
-            self._spawn(client.run(self._accept_inbound_frame))
-        self._spawn(self._drain_reorder())
+            self._spawn(client.run(self._accept_inbound_frame), scope=f"link:{client.peer_id}")
+        self._spawn(self._drain_reorder(), scope="reorder_drain")
         self._started = True
         if self._clock_sync is not None:
             self._clock_sync.start(self.send, self.peers)
@@ -639,7 +839,7 @@ class PeerTransportServer:
                 now_ns=now_ns,
                 silence_threshold_ns=self._silence_threshold_ns,
                 inbound_connected=self._inbound_live.get(peer_id, 0) > 0,
-                inbound_rx_ns=self._inbound_rx_ns.get(peer_id, 0),
+                inbound_rx_ns=self._inbound_rx_ns.get(peer_id),
             )
         silent = [pid for pid, p in peers.items() if p["status"] == PeerStatus.CONNECTED_SILENT]
         offline = [pid for pid, p in peers.items() if p["status"] == PeerStatus.DISCONNECTED]
@@ -672,19 +872,47 @@ class PeerTransportServer:
             "stopped": self._stopping,
         }
 
+    def link_trace(self) -> dict[str, object]:
+        """Why each peer link is in the state :meth:`health` reports.
+
+        Separate from :meth:`health` on purpose. ``health`` answers "what is true
+        now"; this answers "what happened", and only a diagnosis needs it. A peer
+        reporting ``disconnected`` with ``connect_attempts == 1`` looks identical
+        whether the reconnect loop is mid-backoff, mid-retry, or dead - and those
+        three have three different fixes.
+        """
+        return {
+            "recorded": self._trace.recorded,
+            "evicted": self._trace.evicted,
+            "capacity": self._trace.capacity,
+            "inbound_live": dict(sorted(self._inbound_live.items())),
+            "inbound_rx_ns": dict(sorted(self._inbound_rx_ns.items())),
+            "live_tasks": len([task for task in self._tasks if not task.done()]),
+            "worker_failures": self._trace.failures,
+            "events": [event.as_dict() for event in self._trace.events],
+        }
+
     # --------------------------------------------------------------- internals
 
     def _on_connection(self, reader: asyncio.StreamReader, writer: asyncio.StreamWriter) -> None:
         """Accept callback. Tracks the handler so :meth:`stop` leaves no task."""
-        self._spawn(self._serve_connection(reader, writer))
+        self._spawn(self._serve_connection(reader, writer), scope="serve")
 
     async def _serve_connection(self, reader: asyncio.StreamReader, writer: asyncio.StreamWriter) -> None:
         peer_id = ""
+        sockname = writer.get_extra_info("peername")
+        origin = f"{sockname}" if sockname is not None else "?"
         try:
             while True:
                 try:
                     payload = await read_frame(reader, max_bytes=MAX_FRAME_BYTES, stats=self._frames)
                 except ConnectionClosedError:
+                    self._trace.record(
+                        at_ns=self._clock.now_ns(),
+                        scope="serve_clean_eof",
+                        peer_id=peer_id,
+                        detail=f"from {origin} frames_in={self._frames.frames_in}",
+                    )
                     return  # peer hung up at a frame boundary; nothing is wrong
                 except TruncatedFrameError:
                     self._bump("frame:truncated")
@@ -704,11 +932,40 @@ class PeerTransportServer:
                     self._answer_clock_probe(message)
         except ProtocolDecodeError as exc:
             self._bump(f"decode:{exc.code}")
-        except (OSError, ConnectionError):
-            pass
+            self._trace.record(
+                at_ns=self._clock.now_ns(),
+                scope="serve_decode_error",
+                peer_id=peer_id,
+                detail=f"{exc.code} at {exc.field} from {origin}",
+            )
+        except (OSError, ConnectionError) as exc:
+            self._trace.record(
+                at_ns=self._clock.now_ns(),
+                scope="serve_link_died",
+                peer_id=peer_id,
+                detail=f"{type(exc).__name__}: {exc} from {origin}",
+            )
+        except asyncio.CancelledError:
+            raise
+        except BaseException as exc:
+            self._trace.record_exception(
+                at_ns=self._clock.now_ns(),
+                scope="serve_escaped",
+                peer_id=peer_id,
+                exc=exc,
+            )
+            raise
         finally:
             if peer_id:
                 self._inbound_live[peer_id] = max(0, self._inbound_live.get(peer_id, 1) - 1)
+                self._trace.record(
+                    at_ns=self._clock.now_ns(),
+                    scope="serve_closed",
+                    peer_id=peer_id,
+                    detail=(
+                        f"from {origin} live={self._inbound_live[peer_id]} frames_in={self._frames.frames_in}"
+                    ),
+                )
             with suppress(OSError, ConnectionError):
                 writer.close()
                 await writer.wait_closed()
@@ -731,7 +988,16 @@ class PeerTransportServer:
         """
         sync = self._clock_sync
         if sync is not None:
-            sync.observe_reply(message)
+            try:
+                sync.observe_reply(message)
+            except BaseException as exc:
+                self._trace.record_exception(
+                    at_ns=self._clock.now_ns(),
+                    scope="clock_sync_escaped",
+                    peer_id=message.envelope.sender,
+                    exc=exc,
+                )
+                raise
         return self._ingest(message)
 
     def _note_inbound_socket(self, peer_id: str, writer: asyncio.StreamWriter) -> None:
@@ -766,27 +1032,36 @@ class PeerTransportServer:
         Returns True when at least one copy reached the inbox.
         """
         sender = message.envelope.sender
-        outcome = self._admit(message)
-        if outcome not in ("admitted", "probationary"):
-            self._reject(message, f"admission:{outcome}")
-            return False
-        window = self._windows.get(sender)
-        if window is not None and not window.admit(message.envelope.seq):
-            self._reject(message, "replay_window")
-            return False
-        decision = self._fault.apply_inbound(message, self._clock.now_ns())
-        if decision.dropped:
-            self._count_drop(message, f"inbound_{decision.fault_id or 'dropped'}")
-            return False
-        if decision.kind is DecisionKind.HOLD:
-            return False  # the drain worker delivers it when the hold elapses
-        delivered = False
-        for _ in range(decision.copies):
-            if self._inbox.put(message):
-                delivered = True
-            else:
-                self._count_drop(message, "inbox_refused")
-        return delivered
+        try:
+            outcome = self._admit(message)
+            if outcome not in ("admitted", "probationary"):
+                self._reject(message, f"admission:{outcome}")
+                return False
+            window = self._windows.get(sender)
+            if window is not None and not window.admit(message.envelope.seq):
+                self._reject(message, "replay_window")
+                return False
+            decision = self._fault.apply_inbound(message, self._clock.now_ns())
+            if decision.dropped:
+                self._count_drop(message, f"inbound_{decision.fault_id or 'dropped'}")
+                return False
+            if decision.kind is DecisionKind.HOLD:
+                return False  # the drain worker delivers it when the hold elapses
+            delivered = False
+            for _ in range(decision.copies):
+                if self._inbox.put(message):
+                    delivered = True
+                else:
+                    self._count_drop(message, "inbox_refused")
+            return delivered
+        except BaseException as exc:
+            self._trace.record_exception(
+                at_ns=self._clock.now_ns(),
+                scope="ingest_escaped",
+                peer_id=sender,
+                exc=exc,
+            )
+            raise
 
     def _admit(self, message: PeerMessage) -> str:
         """Run the one shared admission rule. Undeclared senders are refused."""
@@ -877,10 +1152,39 @@ class PeerTransportServer:
         self._dropped_by_kind[kind] = self._dropped_by_kind.get(kind, 0) + 1
         self._bump(f"drop:{reason}")
 
-    def _spawn(self, coro: Coroutine[Any, Any, None]) -> None:
+    def _spawn(self, coro: Coroutine[Any, Any, None], *, scope: str = "worker") -> None:
         task = asyncio.ensure_future(coro)
         self._tasks.add(task)
-        task.add_done_callback(self._tasks.discard)
+        task.add_done_callback(partial(self._reap, scope=scope))
+
+    def _reap(self, task: asyncio.Task[None], /, *, scope: str) -> None:
+        """Discard a finished worker, recording *why* it finished.
+
+        Without this the transport's own failure modes are invisible. A worker
+        that dies on an unhandled exception used to leave nothing behind but a
+        silently shrinking worker set and a peer link that never recovers, which
+        is exactly how a link that will never reconnect becomes indistinguishable
+        from a link that is merely between attempts.
+        """
+        self._tasks.discard(task)
+        now_ns = self._clock.now_ns()
+        if task.cancelled():
+            self._trace.record(
+                at_ns=now_ns,
+                scope=f"{scope}.cancelled",
+                detail="worker cancelled; a cancelled worker never reconnects",
+            )
+            return
+        exc = task.exception()
+        if exc is None:
+            return
+        text = "".join(traceback.format_exception(type(exc), exc, exc.__traceback__))
+        self._trace.record_failure(
+            at_ns=now_ns,
+            scope=f"{scope}.failed",
+            peer_id="",
+            summary=f"{type(exc).__name__}: {exc}\n{text[-_TRACEBACK_CHARS:]}",
+        )
 
 
 def _require_loopback(host: str) -> str:

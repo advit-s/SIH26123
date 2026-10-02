@@ -111,6 +111,11 @@ class DeterministicScheduler:
         return self._step_ns / NS_PER_S
 
     @property
+    def step_ns(self) -> int:
+        """The fixed step in whole nanoseconds, so callers never round a float."""
+        return self._step_ns
+
+    @property
     def sim_time_ns(self) -> int:
         return self._now_ns
 

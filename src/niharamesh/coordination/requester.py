@@ -74,6 +74,21 @@ TERMINAL_PHASES: Final[frozenset[AcquisitionPhase]] = frozenset(
     }
 )
 
+#: Phases in which this owner **retains** authority over its zone. A grant arriving
+#: in one of these is a duplicate of an answer already given, never a new authority
+#: and never a reason to withdraw. Kept here rather than inlined because
+#: :meth:`ZoneRequester.on_grant` branches on it and ``agent.runtime`` keeps a
+#: matching set for its own evidence; two definitions of "has authority" that can
+#: drift is the bug this list exists to prevent.
+AUTHORITY_PHASES_OWNER: Final[frozenset[AcquisitionPhase]] = frozenset(
+    {
+        AcquisitionPhase.GRANTED,
+        AcquisitionPhase.OCCUPYING,
+        AcquisitionPhase.OCCUPIED,
+        AcquisitionPhase.RELEASING,
+    }
+)
+
 
 class BlockingClass(StrEnum):
     """Why entry or progress is withheld. Every class names its recovery."""
@@ -192,6 +207,9 @@ class Acquisition:
     cursor: int = 0
     cancel_seq: int = 0
     cancel_sent: set[str] = field(default_factory=set)
+    #: When the current reconciliation pass was emitted, so a lost cancellation is
+    #: re-sent after ``cancel_timeout_ns`` instead of ending the reconciliation.
+    cancel_sent_ns: int = 0
     cancel_acked: set[str] = field(default_factory=set)
     #: Every voter that ever granted this transaction. Cancellation reconciles
     #: with all of them, so no peer keeps a record of a promise the owner has
@@ -427,8 +445,29 @@ class ZoneRequester:
         if acq.phase is AcquisitionPhase.REJECTED or (
             acq.durably_non_executable and acq.phase is not AcquisitionPhase.RELEASING
         ):
+            # Reconciliation is **retransmitted**, not sent once. ``cancel_timeout_ns``
+            # is plumbed all the way from ``ProtocolTiming.cancel_timeout_s`` for
+            # exactly this and was previously never read, so a single lost
+            # ``zone_cancel`` ended the reconciliation permanently: ``CANCELLING`` is
+            # not a terminal phase, so ``begin()`` refuses and ``retry_due`` returns
+            # false, and the robot kept a stale promise at that peer with no way to
+            # clear it or to ask again. Reproduced: after 60 further rounds,
+            # ``phase=cancelling, held=('r1',), acked=['r2']`` with ``r1`` still
+            # ``PROMISED``.
+            #
+            # This mirrors the release retransmission below: the same
+            # ``release_timeout_ns`` reasoning, the same reason. A reconciliation
+            # that assumes its own messages arrive is not a reconciliation.
             for voter in self.cancel_targets(acq):
+                if voter in acq.cancel_sent and now_ns - acq.cancel_sent_ns < self.cancel_timeout_ns:
+                    # Sent on the current pass and the retransmit window has not
+                    # elapsed. Waiting here is a rate limit on *duplicate* frames,
+                    # never a completion criterion: a voter that has not
+                    # acknowledged is retried when the window opens, however many
+                    # times that takes.
+                    continue
                 acq.cancel_sent.add(voter)
+                acq.cancel_sent_ns = now_ns
                 actions.append(ProtocolAction("cancel", voter, cancel=self.cancel_body(acq)))
         if acq.phase in (AcquisitionPhase.CANCELLED, AcquisitionPhase.REJECTED):
             return actions
@@ -473,8 +512,28 @@ class ZoneRequester:
         if acq.phase is AcquisitionPhase.ACQUIRING and acq.durably_non_executable:
             self._answer_late_grant(acq, voter, now_ns)
             return
+        if acq.phase in AUTHORITY_PHASES_OWNER:
+            # A grant for a transaction that already holds authority is a
+            # **duplicate**, not a late grant. It is evidence of nothing: a
+            # duplicated frame, a retransmission, a peer answering a request it had
+            # already answered. Routing it into the late-grant path revoked live
+            # authority -- see ``_answer_late_grant`` -- which contradicts
+            # :meth:`cancel`'s own rule that entry cannot be undone by a
+            # cancellation. Reproduced: a single duplicated grant frame moved an
+            # ``OCCUPIED`` transaction to ``CANCELLING`` with
+            # ``durably_non_executable = True``.
+            self.log(
+                now_ns,
+                LATE_GRANT_IGNORED,
+                acq.zone_id,
+                f"voter={voter} duplicate grant for an already-authorised transaction",
+            )
+            return
         if acq.phase is not AcquisitionPhase.ACQUIRING:
-            # Already granted, entered, cancelled or ended: never a new authority.
+            # Not authorised and not acquiring: a genuinely late grant for a
+            # transaction that was withdrawn. The peer still holds a promise, so
+            # its record must be reconciled -- but only by a cancellation this
+            # robot has actually made durable.
             self._answer_late_grant(acq, voter, now_ns)
             return
         slot = acq.pending_slot()
@@ -529,13 +588,63 @@ class ZoneRequester:
         """A grant after durable cancellation gets a cancel, never authority.
 
         The peer's record must still converge, so this voter is added to the
-        reconciliation set - but the grant creates no authority here, and the
+        reconciliation set -- but the grant creates no authority here, and the
         transaction can never become ``GRANTED`` again.
+
+        The cancellation is made durable **first, and the write is checked**, exactly
+        as :meth:`cancel` does. Setting an in-memory flag and then emitting a
+        withdrawal is the failure this guards: a journal that refuses the write
+        leaves ``durably_non_executable = True`` set and every peer's promise
+        withdrawn on the strength of a cancellation that exists nowhere on disk
+        (invariant 5, AGENTS.md). Reproduced with both failure modes: a port
+        returning an empty record id, and the shipped SQLite journal raising.
+
+        Failing closed means **no withdrawal is emitted**, not that authority is
+        invented. The peer keeps a promise this robot will reconcile later, which is
+        the conservative direction: an over-held aisle stops somebody, whereas a
+        prematurely freed one lets two bodies meet.
         """
         if acq.cancel_seq == 0:
             acq.cancel_seq = 1
+            record = self._append_cancel(acq, f"late_grant:{voter}", now_ns)
+            if not record:
+                acq.cancel_seq = 0
+                self.log(
+                    now_ns,
+                    "CANCEL_NOT_DURABLE",
+                    acq.zone_id,
+                    f"voter={voter}; no withdrawal emitted because the record is not durable",
+                )
+                return
             acq.durably_non_executable = True
-            self.journal.append(
+            acq.cancel_reason = f"late_grant:{voter}"
+            self.log(
+                now_ns,
+                "CANCEL_DURABLE",
+                acq.zone_id,
+                f"seq={acq.cancel_seq} reason=late_grant:{voter}",
+            )
+        acq.late_granted.add(voter)
+        if acq.phase not in AUTHORITY_PHASES_OWNER:
+            acq.phase = AcquisitionPhase.CANCELLING
+        self.log(
+            now_ns,
+            LATE_GRANT_IGNORED,
+            acq.zone_id,
+            f"voter={voter} answered with a cancel so the peer's record converges",
+        )
+
+    def _append_cancel(self, acq: Acquisition, reason: str, now_ns: int) -> str:
+        """Write one cancellation record. Returns ``""`` when it did not persist.
+
+        Wraps the append rather than trusting it, because the shipped journal
+        raises when its underlying storage fails and :meth:`ZoneProtocol.ingest` is
+        the single inbound entry point the transport calls: an exception escaping
+        here takes down the reader task on a path whose entire purpose is to answer
+        a stale frame gracefully.
+        """
+        try:
+            return self.journal.append(
                 RECORD_CANCEL,
                 {
                     "zone_id": acq.zone_id,
@@ -544,18 +653,13 @@ class ZoneRequester:
                     "grant_id": acq.request.grant_id,
                     "cancel_seq": acq.cancel_seq,
                     "durably_non_executable": True,
-                    "reason": f"late_grant:{voter}",
+                    "reason": reason,
                     "owner": self.robot_id,
                 },
             )
-        acq.late_granted.add(voter)
-        acq.phase = AcquisitionPhase.CANCELLING
-        self.log(
-            now_ns,
-            LATE_GRANT_IGNORED,
-            acq.zone_id,
-            f"voter={voter} answered with a cancel so the peer's record converges",
-        )
+        except Exception as exc:
+            self.log(now_ns, "CANCEL_NOT_DURABLE", acq.zone_id, f"journal raised: {exc}")
+            return ""
 
     def on_refusal(self, refusal: Refusal, now_ns: int) -> None:
         """Explicit refusal from a voter: stop this attempt, name the reason."""
@@ -643,26 +747,16 @@ class ZoneRequester:
         acq.cancel_seq += 1
         acq.cancel_reason = reason
         # Durable FIRST. Nothing is emitted until this append returns a record id.
-        record = self.journal.append(
-            RECORD_CANCEL,
-            {
-                "zone_id": acq.zone_id,
-                "requester": acq.request.requester,
-                "request_version": acq.request.request_version,
-                "grant_id": acq.request.grant_id,
-                "cancel_seq": acq.cancel_seq,
-                "durably_non_executable": True,
-                "reason": reason,
-                "owner": self.robot_id,
-            },
-        )
+        record = self._append_cancel(acq, reason, when)
         if not record:
+            acq.cancel_seq -= 1
             self.log(when, "CANCEL_NOT_DURABLE", acq.zone_id, reason)
             return False
         acq.durably_non_executable = True
         acq.phase = AcquisitionPhase.CANCELLING
         acq.last_progress_ns = when
         acq.cancel_sent = set()
+        acq.cancel_sent_ns = when
         self.log(when, "CANCEL_DURABLE", acq.zone_id, f"seq={acq.cancel_seq} reason={reason}")
         self._settle_cancellation(acq, when)
         return True
@@ -670,12 +764,26 @@ class ZoneRequester:
     def cancel_targets(self, acq: Acquisition) -> tuple[str, ...]:
         """Peers whose record may still mention this transaction.
 
-        Everyone who ever granted us, plus anyone who granted *late*, minus the
-        ones already told. Reconciling with all of them is what makes a late
-        grant converge instead of leaving a stale promise at a peer.
+        Everyone who ever granted us, plus anyone who granted *late*, **minus the
+        ones that have acknowledged**.
+
+        The previous version subtracted ``cancel_sent`` -- peers already *told* --
+        which is the wrong set. A cancellation is not complete when it has been
+        sent; it is complete when every peer has acknowledged it. Subtracting
+        ``cancel_sent`` therefore meant the reconciliation could never revisit a
+        peer whose acknowledgement was lost, and this function returned empty while
+        the peer still held ``PROMISED``. That is the whole of the
+        ``cancel_timeout_ns`` defect: ``cancel_sent`` is a rate-limit bookkeeping
+        detail, not a completion criterion, and using it as one ended the
+        reconciliation on the first pass.
+
+        Late grants are handled by the same rule, which is what makes a late grant
+        converge: ``late_granted`` puts the peer back into ``owed``, and because it
+        has not acknowledged, it is targeted again even though it was cancelled in
+        the first pass.
         """
         owed = set(acq.ever_granted) | set(acq.late_granted)
-        return tuple(v for v in self.voter.required_voters if v in owed and v not in acq.cancel_sent)
+        return tuple(v for v in self.voter.required_voters if v in owed and v not in acq.cancel_acked)
 
     def cancel_body(self, acq: Acquisition) -> ZoneCancelBody:
         return ZoneCancelBody(

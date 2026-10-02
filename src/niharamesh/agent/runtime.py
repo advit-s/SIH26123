@@ -27,12 +27,32 @@ from collections.abc import Callable
 from dataclasses import dataclass, field
 from enum import StrEnum
 
-from niharamesh.allocation.auction import LocalAuction
+from niharamesh.allocation.auction import (
+    AllocationMessage,
+    LocalAuction,
+    PartitionConsensusState,
+    RoundSerialisationError,
+    bid_rank,
+)
+from niharamesh.allocation.bids import (
+    BidRequest,
+    BidStreams,
+    TravelEstimate,
+    ZoneClaim,
+)
 from niharamesh.allocation.custody import CustodyLedger
 from niharamesh.clocks import Clock
+from niharamesh.coordination.freshness import FreshnessTable, classify_intent
 from niharamesh.coordination.protocol import ZoneProtocol
 from niharamesh.coordination.requester import AdmissionContext
-from niharamesh.domain.coordination import AcquisitionPhase, PeerMessage
+from niharamesh.domain.coordination import (
+    AcquisitionPhase,
+    PeerEnvelope,
+    PeerIntent,
+    PeerMessage,
+    PeerState,
+    build_message,
+)
 from niharamesh.domain.geometry import (
     OrientedBox,
     Pose,
@@ -43,10 +63,17 @@ from niharamesh.domain.geometry import (
 )
 from niharamesh.domain.identity import Membership, RobotIdentity, RobotSession
 from niharamesh.domain.map import Obstacle, Station, WarehouseMap
-from niharamesh.domain.pose import Footprint, MotionCommand, Pose2, StopReason
+from niharamesh.domain.pose import Footprint, MotionCommand, Pose2, StopReason, UncertaintyModel
 from niharamesh.domain.scenario import Scenario
-from niharamesh.domain.task import TaskState, is_legal_task_transition
-from niharamesh.domain.units import TimeDomain, wrap_angle
+from niharamesh.domain.task import (
+    AllocationRound,
+    Task,
+    TaskBid,
+    TaskOwnershipState,
+    TaskState,
+    is_legal_task_transition,
+)
+from niharamesh.domain.units import PROTOCOL_VERSION, TimeDomain, wrap_angle
 from niharamesh.persistence.journal import SqliteAuthorityJournal
 from niharamesh.planning.astar import AStarPlanner, PathStatus
 from niharamesh.planning.grid import OccupancyGrid
@@ -88,6 +115,18 @@ _GOVERNOR_FLOOR_RADPS = 0.05
 #: Task states with no remaining destination. A delivered task is finished, not
 #: pending: keeping it as a goal made the robot re-service its own delivery.
 _TERMINAL_TASK_STATES: frozenset[TaskState] = frozenset({TaskState.DELIVERED, TaskState.ABANDONED})
+
+#: How far this robot may move before a cached bid travel estimate is recomputed.
+#: A *configured assumption* for bid stability, not a measured constant: it bounds
+#: how wrong a bid may be about distance because the robot drove a little further.
+#: One metre at the declared 0.4 m/s top speed is 2.5 s of travel, so within a
+#: one-second round the estimate cannot be stale by more than that distance.
+_BID_POSE_STALENESS_M = 1.0
+
+#: Prefix on an explicit no-bid that announces a task is off the board for good.
+#: Learned by peers from the *message*, because there is no other way for a robot
+#: to learn that somebody else finished a job.
+WITHDRAWN_PREFIX = "withdrawn_"
 
 #: Acquisition phases after which the transaction is finished, so a fresh one may be
 #: opened for the same zone.
@@ -316,10 +355,23 @@ class RobotAgent:
         self._clock_fault = False
         self._last_command_at_ns: int | None = None
         self._pending_peer_intents: dict[str, FreshnessVerdict] = {}
+        #: The last genuine ``peer_intent`` received from each peer. Retained as
+        #: the message, not as a verdict, so freshness is re-derived every tick
+        #: and an intent can expire without any new message arriving.
+        self._peer_intents: dict[str, PeerIntent] = {}
         self._peer_state_age: dict[str, float | None] = {}
         self._last_decision: SafetyDecision | None = None
         self._last_gate_decision: SafetyDecision | None = None
         self._last_intent_freshness: FreshnessVerdict | None = None
+        #: The refusal the gate returned for this tick's *candidate* command, kept
+        #: even when a pivot was subsequently permitted.
+        #:
+        #: Without it a robot that is blocked but can still turn reports an empty
+        #: constraint, because the permitted pivot overwrites the record of *why*
+        #: it is not going anywhere. An operator then sees a robot spinning in an
+        #: aisle with no stated reason -- indistinguishable from a sensor fault, and
+        #: a refusal that cannot be explained is a refusal that cannot be trusted.
+        self._last_refusal: SafetyDecision | None = None
         #: This tick's own observation. The admission callback runs inside
         #: ``coordinator.tick`` and ``may_enter``, both of which happen during
         #: ``tick``, so the evidence must be published *before* they are reached.
@@ -331,16 +383,39 @@ class RobotAgent:
         #: True once a declared release has reconciled at every voter. Only this may
         #: drop :attr:`_local_occupancy`.
         self._release_reconciled = False
+        #: The zone this body is inside but whose occupancy declaration the protocol
+        #: refused. Non-``None`` freezes the motion decision; see
+        #: :meth:`_decide`.
+        self._entry_undeclared: str | None = None
         self.stop_reason: StopReason = StopReason.NONE
 
+        # -------------------------------------------------------- publication
+        #: Messages this robot has produced for its peers, drained by whoever
+        #: owns the transport. The bodies are built here, from this robot's own
+        #: observation and this robot's own plan. Nothing synthesises them on its
+        #: behalf, so a publication cannot claim more than this agent actually
+        #: believes.
+        self.publications: list[PeerMessage] = []
+        self._last_state_published_ns = -1
+        self._last_intent_published_ns = -1
+        #: Peer claims this robot still holds, and the verdict each one carries.
+        #: Read straight out of the coordinator's freshness table so the gate and
+        #: the protocol can never hold two different opinions about a peer.
+        self.freshness: FreshnessTable = self.coordinator.freshness
+
         fixed = scenario.start_of(identity.robot_id).assigned_task_id
+        self._preassigned_task_id = fixed
         if fixed is not None:
             self.progress.task_id = fixed
             self.progress.state = TaskState.CLAIMED
             # The scenario hands this robot a task outright. That is an *ownership*
             # decision the scenario is entitled to make, so it is recorded as a
             # claim here rather than being left as a private field the custody
-            # ledger has never heard of.
+            # ledger has never heard of. It also bypasses the auction **by
+            # declaration**, and peers are told so: this robot emits an explicit
+            # no-bid carrying ``withdrawn_assigned`` for the whole run, so nobody
+            # else can win it. A pre-assignment that peers cannot see would be two
+            # robots driving to the same payload.
             self.custody.record_claim(fixed, identity.robot_id, session.session_id)
         #: Declared service in progress, if any: which station, and for how long.
         self._service: _Service | None = None
@@ -348,6 +423,467 @@ class RobotAgent:
         #: exactly once per task and the claim is recorded here too, so a duplicate
         #: delivery cannot inflate the count.
         self.completed_tasks: list[str] = []
+        #: Auction traffic this robot has produced, drained by whoever owns the
+        #: transport. A different wire record from ``PeerMessage``; see
+        #: ``allocation.auction`` for the documented mapping point.
+        self.auction_outbox: list[tuple[str, AllocationMessage]] = []
+        self._open_round_index: int | None = None
+        self._withdrawn: set[str] = set()
+        #: A second planner over the *same immutable grid*, used only to price
+        #: bids. Separate instance because ``set_current_pose`` is stateful and the
+        #: motion planner's start pose must never be a bid's doing.
+        self._bid_planner = AStarPlanner(self.grid)
+        #: ``task_id -> (estimate, x, y, round_id)``. See :meth:`_travel_for`.
+        #: ``task_id -> (leg, x, y)`` for the robot-dependent approach leg.
+        #: See :meth:`_travel_for`.
+        self._approach_cache: dict[str, tuple[tuple[float, float, str], float, float]] = {}
+        #: ``task_id -> leg`` for the map-dependent delivery leg, computed once.
+        self._delivery_leg_cache: dict[str, tuple[float, float, str]] = {}
+
+    # ------------------------------------------------------- allocation feed
+
+    @property
+    def _assignment_round_period_s(self) -> float:
+        """Declared allocation round period, in SIM_SECONDS.
+
+        A round boundary is derived from the clock alone so every robot opens the
+        same round without anybody announcing it. Anything that depended on a
+        robot hearing an announcement would make allocation depend on the very
+        communication a partition can cut.
+        """
+        return 1.0
+
+    def _round_index(self, now_s: float) -> int:
+        return int(now_s // self._assignment_round_period_s)
+
+    def _released_task_ids(self, now_s: float) -> tuple[str, ...]:
+        """Tasks the shared feed has released, in a stable order.
+
+        Derived from the immutable scenario every agent legitimately holds plus
+        the run's own clock. Not another robot's state, and not a central
+        decision: every robot computes the same list, which is what lets them
+        agree on an award without a backend.
+        """
+        return tuple(sorted(t.task_id for t in self.scenario.tasks if t.release_at_s <= now_s))
+
+    def _open_or_advance_round(self, now_ns: int, now_s: float) -> None:
+        """Open this robot's allocation round for the current boundary.
+
+        Round identity is a pure function of the clock, so two robots cannot
+        disagree about which round they are in. A round closes only when its
+        participants agree to close it: no timer closes a round here, and a live
+        bid of this robot's own must be withdrawn explicitly first.
+        """
+        index = self._round_index(now_s)
+        released = self._released_task_ids(now_s)
+        if index == self._open_round_index:
+            return
+        if self.auction.round is not None:
+            if self.auction.live_bid_task is not None:
+                self.auction.retire_live_bid("round closed before the award agreed")
+            self.auction.close_round(now_ns=now_ns)
+        round_id = f"{self.run_id}-a{index}"
+        self.auction.open_round(
+            AllocationRound(
+                round_id=round_id,
+                run_id=self.run_id,
+                epoch=self.membership.epoch,
+                index=index,
+                released_task_ids=released,
+                snapshot_digest=self.scenario.digest(),
+                opened_at_ns=now_ns,
+            ),
+            now_ns=now_ns,
+        )
+        self._open_round_index = index
+
+    def _tasks_in_custody(self) -> tuple[str, ...]:
+        """Declared tasks this robot is physically responsible for right now.
+
+        Read from **this robot's own** custody ledger. The ledger is the
+        authority for task state (see :meth:`_adopt_ledger_state`); the runtime's
+        private enum is derived from it and is never consulted in its place.
+        """
+        active = (TaskState.CLAIMED, TaskState.PICKUP_CONFIRMED, TaskState.IN_TRANSIT)
+        return tuple(
+            sorted(t.task_id for t in self.scenario.tasks if self.custody.task_state(t.task_id) in active)
+        )
+
+    def _withdrawn_task_ids(self) -> set[str]:
+        """Tasks this robot knows are no longer available to anybody.
+
+        Derived from its own delivery record plus what peers have explicitly
+        announced. A withdrawn task still gets a report from every member -- an
+        explicit no-bid, never silence -- so the round's bid set stays complete
+        and every robot computes the same "no feasible bid" outcome for it.
+        """
+        return set(self.completed_tasks) | self._withdrawn
+
+    def _run_allocation_round(self, now_ns: int, observation: Observation) -> None:
+        """One complete allocation round: bid, exchange, recompute, commit.
+
+        Four steps, in this order, and the order is the contract:
+
+        1. **bid** -- price locally and commit at most one bid;
+        2. **emit** -- every member's report for *every* released task goes into
+           this robot's own outbox, so silence is never a possible answer;
+        3. **recompute** -- after this tick's traffic has been delivered, commit
+           the award if this robot's own recomputation names it the winner *and*
+           every member reported;
+        4. **adopt** -- only then does the task enter this robot's plan.
+
+        Steps 1-2 happen before the physics step; steps 3-4 must happen *after*
+        delivery, which is why :meth:`settle_allocation` is a separate call the
+        harness makes once the inbox has been drained. Doing 3 inside this method
+        would compute an award from the previous tick's bids and call it this
+        tick's.
+        """
+        now_s = now_ns / 1e9
+        self._open_or_advance_round(now_ns, now_s)
+        self._bid_this_round(now_ns, now_s, observation)
+        if self.auction.round is None:
+            return
+        for target, message in self._allocation_emissions(now_ns):
+            self.auction_outbox.append((target, message))
+            del message
+
+    def _allocation_emissions(self, now_ns: int) -> list[tuple[str, AllocationMessage]]:
+        """This robot's own auction traffic: its bids, plus an award it can support.
+
+        An award is announced **only when every member of the round has reported**
+        for that task. Announcing a verdict computed from an incomplete bid set is
+        exactly the thing :meth:`LocalAuction.consensus` exists to prevent, and it
+        has a concrete cost: every peer compares the announced ``bid_set_digest``
+        against its own computation, the two differ, and a permanent
+        ``inconsistent`` disagreement is recorded for a task that was merely
+        mid-exchange. Measured on ``dynamic-arrivals``: all three robots computed
+        the *same* winner over the *same* three bid rows, and all three still
+        reported a digest mismatch, because the announcement had been priced
+        against one or two of those rows.
+
+        Bids are still emitted for every released task whether or not the award can
+        be announced. Silence is never acceptable, so a round nobody can agree on
+        still reports itself; it just does not claim a result.
+        """
+        auction = self.auction
+        if auction.round is None:
+            return []
+        out: list[tuple[str, AllocationMessage]] = []
+        for task_id in auction.round.released_task_ids:
+            agreed = auction.consensus(task_id, now_ns=now_ns) is PartitionConsensusState.AGREED
+            if not agreed or task_id in self._withdrawn_task_ids():
+                continue
+            announcement = auction.announce(task_id, now_ns=now_ns)
+            for peer in sorted(self.membership.members):
+                if peer != self.identity.robot_id:
+                    out.append((peer, announcement))
+        for emitted in auction.bid(now_ns):
+            record = emitted if isinstance(emitted, AllocationMessage) else None
+            if record is None:
+                # ``TaskAllocator.bid`` is typed as ``list[object]`` on the port, so
+                # a future implementation could emit something else. Refusing to
+                # route an unrecognised record is the only safe reading: silently
+                # casting it would put an unknown object on the wire.
+                continue
+            for peer in sorted(self.membership.members):
+                if peer != self.identity.robot_id:
+                    out.append((peer, record))
+        return out
+
+    def settle_allocation(self, now_ns: int) -> None:
+        """Recompute and commit the award, once this tick's traffic has landed.
+
+        Refuses to act on a round it has not heard every member report on. That
+        refusal is the honest one: a robot that has not heard from a member
+        cannot establish agreement, so starting the task would be acting on an
+        incomplete picture. It never guesses a winner.
+        """
+        auction = self.auction
+        if auction.round is None:
+            return
+        for task_id in auction.round.released_task_ids:
+            if task_id in self._withdrawn_task_ids():
+                continue
+            if auction.consensus(task_id, now_ns=now_ns) is not PartitionConsensusState.AGREED:
+                continue
+            outcome = auction.compute_award(task_id, now_ns=now_ns)
+            if outcome.award is None:
+                continue
+            auction.commit(outcome, now_ns=now_ns)
+        self._adopt_awarded_task(now_ns)
+
+    def _held_task_ids(self) -> set[str]:
+        """Tasks this robot is already committed to, for whatever reason.
+
+        The union of three declared facts, each of which individually removes the
+        task from this robot's bidding:
+
+        * **in custody** -- its own ledger says this robot is physically
+          responsible for the job;
+        * **won** -- it already holds ownership from an earlier round, so it does
+          not need to win it again;
+        * **finished** -- it delivered it, so it is off the board for good.
+
+        Re-bidding on a task already held is how a second robot won the same job
+        in the round after the first one committed: measured on
+        ``dynamic-arrivals``, amr-01 held ``t-dyn-0`` at ownership version 1466
+        while amr-03 held it at version 1600, both from locally correct
+        recomputations over their own bid sets.
+        """
+        held = set(self._tasks_in_custody()) | set(self.completed_tasks)
+        for task_id, record in self.auction._ownership.items():
+            if record.owner == self.identity.robot_id and record.state is not TaskOwnershipState.RELEASED:
+                held.add(task_id)
+        return held
+
+    def _bid_this_round(self, now_ns: int, now_s: float, observation: Observation) -> None:
+        """Price and commit this robot's bid for the open round.
+
+        Capacity is one task, and **a robot that already holds work does not bid
+        again at all**. It withdraws what it holds and stops competing. That is the
+        mechanism, and it is not a convenience: the auction deliberately has no
+        shared register, so the only way to keep two robots off one payload is for
+        the robot that already has it to announce an explicit no-bid that peers
+        honour. A robot that kept bidding on a job it had already won would be
+        competing with itself while a peer quietly won a second copy of the same
+        job.
+        """
+        auction = self.auction
+        if auction.round is None:
+            return
+        withdrawn = self._withdrawn_task_ids()
+        # A task this robot's **own custody ledger** says is in progress is
+        # withdrawn from the round before anybody bids on it. Measured on
+        # ``dynamic-arrivals`` at an 80 s budget: amr-01 held ``t-dyn-0`` at
+        # ownership version 1280 while amr-02 held the same task at version 320,
+        # because each round recomputed a slightly different winner as travel
+        # estimates fell, and each robot's local ownership map was the only thing
+        # standing between them. Re-awarding a job that is already being carried is
+        # not a bidding nicety: two robots driving to the same payload, and one
+        # completion credit for two bodies.
+        #
+        # The announcement is what makes it safe. A peer cannot see another
+        # robot's custody ledger, so it learns of the withdrawal only from this
+        # explicit no-bid -- and that is the point of never answering in silence.
+        for task_id in sorted(self._held_task_ids()):
+            reason = (
+                "delivered"
+                if task_id in self.completed_tasks
+                else ("in_custody" if task_id in set(self._tasks_in_custody()) else "awarded_to_me")
+            )
+            auction.note_withdrawn(task_id, reason)
+        stream = BidStreams(
+            run_id=self.run_id,
+            epoch=self.membership.epoch,
+            round_id=auction.round.round_id,
+            planner_seed=self.scenario.policy.planner_seed,
+        )
+        # A pre-assigned task is not on offer, and never was. Announcing that is
+        # what keeps a second robot from winning it.
+        if self._preassigned_task_id is not None:
+            auction.note_withdrawn(self._preassigned_task_id, "assigned_by_scenario")
+
+        if self._held_task_ids():
+            # Already committed. See the method docstring.
+            return
+
+        best: TaskBid | None = None
+        for task_id in auction.round.released_task_ids:
+            if task_id in withdrawn or self._awarded_elsewhere(task_id, now_ns):
+                continue
+            bid = self._price(task_id, now_ns, now_s, observation, stream)
+            if bid is None or not bid.feasible:
+                continue
+            if best is None or bid_rank(bid) < bid_rank(best):
+                best = bid
+        if best is not None:
+            auction.consider(best)
+
+    def _awarded_elsewhere(self, task_id: str, now_ns: int) -> bool:
+        """True when this robot's own recomputation already names somebody else.
+
+        Derived locally, from the same bid set every other member computes over --
+        not from a central verdict and not from a peer's announcement. A robot
+        that kept bidding on a job it had already lost would sit on its capacity
+        reservation forever: the auction reserves a live bid for the rest of the
+        round, so a loser that never lets go can never bid on anything else, and a
+        single-task-per-robot fleet would starve its other two robots for the whole
+        run.
+
+        Requires ``agreed`` deliberately. While any member is unheard from this
+        robot cannot establish who won, so it keeps bidding: over-bidding on a
+        contested task costs nothing, whereas abandoning one on a guess would.
+        """
+        auction = self.auction
+        if auction.consensus(task_id, now_ns=now_ns) is not PartitionConsensusState.AGREED:
+            return False
+        outcome = auction.compute_award(task_id, now_ns=now_ns)
+        return bool(outcome.winner) and outcome.winner != self.identity.robot_id
+
+    def _price(
+        self,
+        task_id: str,
+        now_ns: int,
+        now_s: float,
+        observation: Observation,
+        stream: BidStreams,
+    ) -> TaskBid | None:
+        """Price one task from this robot's own beliefs. ``None`` when unknown."""
+        try:
+            task = self.scenario.task(task_id)
+        except KeyError:  # pragma: no cover - the feed only names declared tasks
+            return None
+        travel = self._travel_for(task, observation.pose_estimate.pose)
+        request = BidRequest(
+            robot_id=self.identity.robot_id,
+            robot_session=self.session.session_id,
+            run_id=self.run_id,
+            epoch=self.membership.epoch,
+            task_id=task_id,
+            now_ns=now_ns,
+            now_s=now_s,
+            pose=observation.pose_estimate.pose,
+            battery_fraction=observation.battery_fraction,
+            capabilities=self.identity.capabilities,
+            footprint=self.identity.footprint,
+            carrying_task_id=self.progress.task_id if self.progress.carrying else None,
+            travel=travel,
+            zone_claims=self._zone_claims(now_ns),
+            time_domain=TimeDomain.LOGICAL,
+        )
+        try:
+            return self.auction.submit(task, request, stream)
+        except RoundSerialisationError:  # pragma: no cover - round is open here
+            return None
+
+    def _travel_estimate(self, task: Task, pose: Pose2) -> TravelEstimate:
+        """This robot's own planner estimate for both legs, with its own reasons.
+
+        Both legs are priced, not just the one this robot is driving now: a bid
+        that ignored the delivery leg would be the cheapest bid for every task and
+        the auction would stop discriminating anything. This is the uncached form;
+        :meth:`_travel_for` is what the round actually calls.
+        """
+        try:
+            pickup = self.warehouse_map.station(task.pickup_station_id)
+            drop = self.warehouse_map.station(task.drop_station_id)
+        except KeyError:
+            return TravelEstimate(0.0, 0.0, 0.0, 0.0, "unknown_station", "unknown_station")
+        to_pickup = self._leg((pose.x, pose.y), (pickup.pose.x, pickup.pose.y))
+        pickup_to_drop = self._leg((pickup.pose.x, pickup.pose.y), (drop.pose.x, drop.pose.y))
+        return _join_legs(to_pickup, pickup_to_drop)
+
+    def _leg(self, start: tuple[float, float], goal: tuple[float, float]) -> tuple[float, float, str]:
+        """``(seconds, metres, reason)`` for one planner leg.
+
+        Uses a **separate** planner instance from the one that steers. They share
+        one immutable grid, so the estimate is the same plan, but ``set_current_pose``
+        mutates planner state: sharing the instance would let a bid estimate
+        overwrite the start pose the motion planner is about to search from, and a
+        robot would then follow a path computed from where it was when it last
+        bid rather than from where it is.
+        """
+        self._bid_planner.set_current_pose(Pose2(x=start[0], y=start[1], theta=0.0))
+        waypoints = self._bid_planner.plan(goal, self.identity.footprint)
+        result = self._bid_planner.last_result
+        if not waypoints or result is None:
+            reason = "no_result"
+            if result is not None and result.unreachable_reason is not None:
+                reason = result.unreachable_reason.value
+            return 0.0, 0.0, reason
+        return result.cost_s, result.length_m, "ok"
+
+    def _travel_for(self, task: Task, pose: Pose2) -> TravelEstimate:
+        """A travel estimate, recomputed only when it could have changed.
+
+        Two legs of A* per released task, per robot, is the dominant cost of a
+        round: profiled at 0.32 s per estimate on the authored grid, 19 s of a 20 s
+        run. Two caches, because the two legs have genuinely different lifetimes.
+
+        * **pickup -> drop** does not depend on where this robot is. It is a fact
+          about the map and the two stations, so it is computed once per task for
+          the whole run and never invalidated.
+        * **here -> pickup** does depend on the robot, so it is recomputed once the
+          body has moved further than :data:`_BID_POSE_STALENESS_M` from the pose it
+          was priced at.
+
+        Neither bound is a measured constant. The first is structural -- the two
+        endpoints do not move. The second is a *configured assumption* quantifying
+        how wrong a bid may be about its own distance because the robot drove a
+        little further.
+        """
+        delivery = self._delivery_leg_cache.get(task.task_id)
+        if delivery is None:
+            delivery = self._leg_between_stations(task)
+            self._delivery_leg_cache[task.task_id] = delivery
+        cached = self._approach_cache.get(task.task_id)
+        if cached is not None:
+            approach, at_x, at_y = cached
+            if math.hypot(pose.x - at_x, pose.y - at_y) <= _BID_POSE_STALENESS_M:
+                return _join_legs(approach, delivery)
+        approach = self._leg_to_pickup(task, pose)
+        self._approach_cache[task.task_id] = (approach, pose.x, pose.y)
+        return _join_legs(approach, delivery)
+
+    def _leg_to_pickup(self, task: Task, pose: Pose2) -> tuple[float, float, str]:
+        try:
+            pickup = self.warehouse_map.station(task.pickup_station_id)
+        except KeyError:
+            return 0.0, 0.0, "unknown_station"
+        return self._leg((pose.x, pose.y), (pickup.pose.x, pickup.pose.y))
+
+    def _leg_between_stations(self, task: Task) -> tuple[float, float, str]:
+        try:
+            pickup = self.warehouse_map.station(task.pickup_station_id)
+            drop = self.warehouse_map.station(task.drop_station_id)
+        except KeyError:
+            return 0.0, 0.0, "unknown_station"
+        return self._leg((pickup.pose.x, pickup.pose.y), (drop.pose.x, drop.pose.y))
+
+    def _zone_claims(self, now_ns: int) -> tuple[ZoneClaim, ...]:
+        """What this robot believes about every route zone, from its own book.
+
+        A belief, never truth. The timestamp is this robot's own last observation
+        of that zone, in its own clock domain, and :mod:`~niharamesh.allocation.bids`
+        adds a risk term when that stamp has gone stale rather than pretending the
+        zone became free.
+        """
+        claims: list[ZoneClaim] = []
+        for zone_id, holder in sorted(self.coordinator.holders().items()):
+            try:
+                state = self.coordinator.voter.state_of(zone_id)
+            except KeyError:  # pragma: no cover - holders() names only real zones
+                continue
+            claims.append(
+                ZoneClaim(
+                    zone_id=zone_id,
+                    holder=holder,
+                    state=state,
+                    observed_at_ns=now_ns,
+                    time_domain=TimeDomain.LOGICAL,
+                )
+            )
+        return tuple(claims)
+
+    def _adopt_awarded_task(self, now_ns: int) -> None:
+        """Take the task this robot won, if it won one it may actually start.
+
+        An award is only acted on when consensus is ``agreed``: a robot that has
+        not heard from a member cannot establish agreement, so it does not start.
+        The custody claim is recorded through the ledger rather than left as a
+        private field, so a later disagreement is visible instead of silent.
+        """
+        won = self.auction.owned_task()
+        if won is None or won == self.progress.task_id:
+            return
+        self.progress.task_id = won
+        self.progress.state = TaskState.CLAIMED
+        self.progress.unreachable_reason = None
+        self.progress.carrying = False
+        self.progress.completion_credited = False
+        self.progress.transitions.append(f"awarded:{won}")
+        self.custody.record_claim(won, self.identity.robot_id, self.session.session_id)
+        del now_ns
 
     # ------------------------------------------------------------------ peer
 
@@ -357,15 +893,63 @@ class RobotAgent:
         Both subsystems validate identity, epoch and session themselves, so a
         message that either rejects is rejected for them too rather than being
         quietly forwarded.
+
+        A ``peer_intent`` is retained here so the safety gate can be told what the
+        sender *claims to want*, re-classified against the current clock on every
+        tick. Retaining the message rather than a verdict is what lets an intent
+        expire with no new message arriving.
         """
         self.coordinator.ingest(message)
         self.auction.handle(message)
+        body = message.body
+        if isinstance(body, PeerIntent):
+            known = self._peer_intents.get(body.robot_id)
+            # A late message must not move the record backwards. Sequence is the
+            # per-sender monotonic counter, so this is a replay/reorder guard and
+            # nothing more.
+            if known is None or body.seq >= known.seq:
+                self._peer_intents[body.robot_id] = body
 
     def note_peer_freshness(self, peer_id: str, verdict: FreshnessVerdict) -> None:
         self._pending_peer_intents[peer_id] = verdict
 
     def note_intent_freshness(self, verdict: FreshnessVerdict | None) -> None:
         self._last_intent_freshness = verdict
+
+    def ingest_allocation(self, message: AllocationMessage) -> None:
+        """Apply one genuine auction record from a peer.
+
+        A separate entry point from :meth:`ingest` because an
+        ``AllocationMessage`` is not a ``PeerMessage``: the domain body union
+        carries no auction body. Routing one kind through the other's validation
+        would either reject every bid or accept every unvalidated frame.
+        """
+        self.auction.handle(message)
+        body = message.body
+        if not isinstance(body, TaskBid) or not body.infeasible_reason.startswith(WITHDRAWN_PREFIX):
+            return
+        reason = body.infeasible_reason[len(WITHDRAWN_PREFIX) :]
+        # A peer's explicit announcement that a task is off the board. Learned
+        # from the message, never inferred: this robot has no other way to learn
+        # that somebody else finished a job.
+        self._withdrawn.add(body.task_id)
+        # The announcement is *authoritative over this robot's local award*, which
+        # is what makes withdrawal work at all. Measured on ``dynamic-arrivals``:
+        # amr-01 delivered ``t-dyn-0`` at 200 s, amr-02 still held the same task at
+        # ownership version 320, and amr-03 at 640 -- three robots on one payload
+        # after one completion credit. Each robot's award was locally correct over
+        # its own bid set; what was missing was any rule that a peer's declared
+        # custody outranks a stale local recomputation. Without this, an auction
+        # with no shared register has no way to *stop* awarding.
+        mine = self.auction.ownership(body.task_id)
+        if mine is not None and mine.owner == self.identity.robot_id:
+            self.auction.release_ownership(body.task_id, f"peer {body.robot_id} withdrew: {reason}")
+            if self.progress.task_id == body.task_id and self.custody.task_state(body.task_id) in (
+                TaskState.AVAILABLE,
+            ):
+                self.progress.task_id = None
+                self.progress.state = TaskState.AVAILABLE
+                self.progress.transitions.append(f"withdrawn_by:{body.robot_id}:{reason}")
 
     # ------------------------------------------------------------------ loop
 
@@ -397,6 +981,7 @@ class RobotAgent:
         self.planner.set_current_pose(observation.pose_estimate.pose)
         self.coordinator.tick(now)
         self.auction.tick(now)
+        self._run_allocation_round(now, observation)
         self._advance_task_state(now)
 
         evidence = self.zone_evidence_for(observation)
@@ -410,7 +995,162 @@ class RobotAgent:
         decision = self._decide(observation, evidence, now)
         command = self._to_command(observation, evidence, decision, now)
         self._last_decision = decision
+        # Publication happens after the decision, so what a peer is told is what
+        # this robot just decided, not a prediction of what it might decide.
+        self._publish_own_state(now)
+        self._publish_own_intent(now)
+        self._refresh_peer_freshness(now)
         return command
+
+    # ------------------------------------------------------- publication
+
+    def _envelope(self, kind: str, seq: int, now_ns: int, correlation: str = "") -> PeerEnvelope:
+        """Framing for one publication this robot originates.
+
+        ``seq`` is drawn from the coordinator's single per-sender counter, not from
+        a private one. The receiver's replay window is keyed on ``(sender, seq)``
+        across every message kind, so two independent counters make a legitimate
+        ``peer_state`` look like a replayed ``zone_request``.
+        """
+        return PeerEnvelope(
+            kind=kind,
+            protocol_version=PROTOCOL_VERSION,
+            sender=self.identity.robot_id,
+            sender_session=self.session.session_id,
+            run_id=self.run_id,
+            epoch=self.membership.epoch,
+            seq=seq,
+            sent_at_ns=now_ns,
+            time_domain=TimeDomain.LOGICAL,
+            correlation_id=correlation,
+        )
+
+    def _publish_own_state(self, now_ns: int) -> None:
+        """Publish **this robot's own** observed state, on the declared cadence.
+
+        Every field comes from this tick's own :class:`Observation`: the pose
+        *estimate* with the estimator's own declared uncertainty, the measured
+        velocity, the measured battery with its source. The simulator's exact
+        pose is not reachable from here, and the battery is published with the
+        label that says where it came from rather than as a bare number.
+
+        Liveness is a separate message from a separate module; publishing it here
+        would be this agent claiming to be its own heartbeat authority.
+        """
+        period = int(self.scenario.simulation.protocol.state_publish_period_s * 1e9)
+        if self._last_state_published_ns >= 0 and now_ns - self._last_state_published_ns < period:
+            return
+        observation = self._latest_observation
+        if observation is None:
+            return
+        self._last_state_published_ns = now_ns
+        seq = self.coordinator.next_sequence()
+        estimate = observation.pose_estimate
+        body = PeerState(
+            robot_id=self.identity.robot_id,
+            session_id=self.session.session_id,
+            seq=seq,
+            pose=(estimate.pose.x, estimate.pose.y, estimate.pose.theta),
+            velocity=(observation.motion.linear_velocity_mps, observation.motion.angular_velocity_radps),
+            uncertainty_m=_uncertainty_bound_m(estimate.uncertainty),
+            uncertainty_rad=_uncertainty_bound_rad(estimate.uncertainty),
+            battery_fraction=observation.battery_fraction,
+            battery_source=self.scenario.simulation.battery.source,
+            carrying_task_id=self.progress.task_id if self.progress.carrying else None,
+            stop_reason=self.stop_reason.value,
+            sent_at_ns=now_ns,
+            time_domain=TimeDomain.LOGICAL,
+        )
+        self.publications.append(build_message(self._envelope("peer_state", seq, now_ns), body))
+
+    def _publish_own_intent(self, now_ns: int) -> None:
+        """Publish **this robot's own** locally computed intent.
+
+        A prediction, not an authorisation: receiving it grants nothing. The
+        validity horizon is declared by the scenario's protocol timing, which is
+        what lets a receiver treat an intent that arrived perfectly on time as
+        STALE once the prediction itself is no longer a fair claim.
+
+        A published intent is *not* an entry permission and never becomes one --
+        only the complete durable grant set does that.
+        """
+        period = int(self.scenario.simulation.protocol.intent_publish_period_s * 1e9)
+        if self._last_intent_published_ns >= 0 and now_ns - self._last_intent_published_ns < period:
+            return
+        self._last_intent_published_ns = now_ns
+        seq = self.coordinator.next_sequence()
+        # Sample the local plan, not a global route: these are waypoints this
+        # robot computed for itself from its own map.
+        projected = tuple((x, y, 0.0) for x, y in self.plan[:: max(1, len(self.plan) // 32)][:32])
+        expected = self._zones_ahead_on_plan()
+        body = PeerIntent(
+            run_id=self.run_id,
+            epoch=self.membership.epoch,
+            map_id=self.warehouse_map.map_id,
+            map_digest=self.warehouse_map.digest(),
+            robot_id=self.identity.robot_id,
+            session_id=self.session.session_id,
+            seq=seq,
+            plan_version=self.plan_version,
+            projected_path=projected,
+            expected_zones=expected,
+            validity_horizon_ns=int(self.scenario.simulation.protocol.intent_validity_s * 1e9),
+            sent_at_ns=now_ns,
+            time_domain=TimeDomain.LOGICAL,
+        )
+        self.publications.append(build_message(self._envelope("peer_intent", seq, now_ns), body))
+
+    def _zones_ahead_on_plan(self) -> tuple[str, ...]:
+        """Zones this robot's own remaining plan brings it near, bounded to eight."""
+        margin = self._conservative_margin_m()
+        found: list[str] = []
+        for x, y in self.plan:
+            if len(found) >= 8:
+                break
+            bounds = _inflated_bounds(x, y, self.identity.footprint, margin)
+            for zone in self.warehouse_map.zones:
+                if zone.id in found:
+                    continue
+                if aabb_overlap(bounds, zone.protected_bounds):
+                    found.append(zone.id)
+        return tuple(found)
+
+    def _refresh_peer_freshness(self, now_ns: int) -> None:
+        """Mirror the coordinator's verdicts into the gate's view of its peers.
+
+        The gate needs "may I rely on this peer's claim", and the coordinator's
+        freshness table is the only place that question is answered. Copying the
+        verdicts rather than re-deriving them means the safety gate and the entry
+        protocol cannot hold two different opinions about the same peer.
+
+        ``coordinator.tick`` has already called ``observe_now``, so this reflects
+        verdicts that have just expired rather than ones cached at receipt time.
+        """
+        pending: dict[str, FreshnessVerdict] = {}
+        for peer_id in sorted(self.membership.members):
+            entry = self.freshness.get(peer_id)
+            if entry is None:
+                continue
+            pending[peer_id] = FreshnessVerdict(
+                entry.freshness, entry.age_ns, entry.uncertainty_ns, entry.reason
+            )
+        self._pending_peer_intents = pending
+        # The intent verdict is re-derived here, every tick, from the retained
+        # message rather than from a cached one -- so an intent that expires stops
+        # being usable without any new message arriving. It is classified by the
+        # shared freshness rule, not by a second implementation of it.
+        worst: FreshnessVerdict | None = None
+        for peer_id in sorted(self._peer_intents):
+            verdict = classify_intent(
+                self._peer_intents[peer_id],
+                now_ns,
+                TimeDomain.LOGICAL,
+                self.coordinator.freshness.estimator,
+                self.coordinator.freshness.guard,
+            )
+            if worst is None or (verdict.usable and not worst.usable):
+                worst = verdict
+        self._last_intent_freshness = worst
 
     # ------------------------------------------------------- zone lifecycle
 
@@ -443,8 +1183,29 @@ class RobotAgent:
 
         phase = self.coordinator.phase()
         if phase is AcquisitionPhase.GRANTED and held is not None and evidence.occupied_zone == held:
-            self.coordinator.mark_entered(held)
+            if self.coordinator.mark_entered(held):
+                return
+            # The body is on the protected geometry and the protocol **refused** the
+            # entry declaration. Carrying on regardless is the bug this closes: the
+            # declaration is what tells the peers this zone is occupied, so a refused
+            # declaration that is ignored leaves every voter reading ``FREE`` while
+            # this body is inside the aisle -- and a second robot can then be granted
+            # it. ``ZoneVoter.apply_occupy`` now also recovers an occupancy
+            # declaration that arrives at a voter with no record, so the peers are
+            # protected even so; this is the owner refusing to deepen the position it
+            # cannot account for. Stop here, visibly, with the reason.
+            self.phase = AgentPhase.WAITING
+            self.why = WhyWaiting(
+                waiting=True,
+                reason=(
+                    f"inside {held} but entry could not be declared: {self.coordinator.why_blocked(held)}"
+                ),
+                blocking_resource=held,
+                recovery_condition=("local safety evidence or the durable journal becomes usable again"),
+            )
+            self._entry_undeclared = held
             return
+        self._entry_undeclared = None
         if phase is AcquisitionPhase.OCCUPIED and held is not None and evidence.occupied_zone != held:
             self.coordinator.release()
         if (
@@ -544,6 +1305,10 @@ class RobotAgent:
         if self.custody.completion_credit(task_id):
             self.completed_tasks.append(task_id)
             self.progress.completion_credited = True
+        # The job is done, so ownership is handed back *explicitly*. Leaving it to
+        # fall out of the bid set would leave this robot looking like the owner of a
+        # finished task for as long as the round held it.
+        self.auction.release_ownership(task_id, "delivered and credited")
         self.why = WhyWaiting()
 
     def _adopt_ledger_state(self, task_id: str, *effects: object) -> None:
@@ -585,6 +1350,17 @@ class RobotAgent:
         # are read here to decide whether an outstanding grant is still needed.
         pose = observation.pose_estimate.pose
         station = self._next_station()
+
+        if self._entry_undeclared is not None:
+            # Set by :meth:`_update_zone_lifecycle`: this body is inside a zone whose
+            # occupancy it could not declare. Nothing that follows may make it drive
+            # deeper into a position no peer can account for, so this outranks the
+            # phase decision below -- including a station it was on its way to.
+            return SafetyDecision(
+                False,
+                StopReason.ZONE_AUTHORITY_MISSING,
+                f"entry_undeclared:{self._entry_undeclared}",
+            )
 
         if station is None:
             self._abandon_unneeded_transaction(evidence)
@@ -1100,6 +1876,7 @@ class RobotAgent:
                 self.stop_reason = decision.reason
             else:
                 self.stop_reason = StopReason.NONE
+            self._last_refusal = None
             self._last_gate_decision = final
             return candidate
 
@@ -1114,6 +1891,7 @@ class RobotAgent:
         pivot_verdict = self.gate.evaluate(pivot, now_ns, pivot_context)
         self._last_gate_decision = pivot_verdict if pivot_verdict.permitted else final
         self.stop_reason = final.reason
+        self._last_refusal = final
         if pivot_verdict.permitted:
             return pivot
         return candidate.model_copy(update={"linear_mps": 0.0, "angular_radps": 0.0})
@@ -1138,6 +1916,11 @@ class RobotAgent:
             battery_fraction=observation.battery_fraction,
             control_loop_age_ns=self._control_loop_age_ns,
             obstacle_distance_m=self._forward_clearance_m(observation),
+            # Two declared bodies of this footprint, keep at least their combined
+            # half-widths apart. A *bound* derived from this robot's own geometry,
+            # never a peer's measured pose -- the gate only ever compares it against
+            # what this robot's own scan reported.
+            peer_separation_m=2.0 * self.identity.footprint.width_m + self._uncertainty_margin_m(),
         )
 
     def _forward_clearance_m(self, observation: Observation) -> float | None:
@@ -1323,6 +2106,9 @@ class RobotAgent:
             "gate_constraint": (
                 "" if self._last_gate_decision is None else self._last_gate_decision.limiting_constraint
             ),
+            "gate_refusal_constraint": ""
+            if self._last_refusal is None
+            else self._last_refusal.limiting_constraint,
             "gate_permitted": None
             if self._last_gate_decision is None
             else self._last_gate_decision.permitted,
@@ -1331,6 +2117,52 @@ class RobotAgent:
 
     def close(self) -> None:
         self.journal.close()
+
+
+def _join_legs(approach: tuple[float, float, str], delivery: tuple[float, float, str]) -> TravelEstimate:
+    """Combine the two legs into one estimate, carrying both reasons."""
+    return TravelEstimate(
+        to_pickup_s=approach[0],
+        pickup_to_drop_s=delivery[0],
+        to_pickup_distance_m=approach[1],
+        pickup_to_drop_distance_m=delivery[1],
+        to_pickup_reason=approach[2],
+        pickup_to_drop_reason=delivery[2],
+    )
+
+
+def _uncertainty_bound_rad(uncertainty: UncertaintyModel) -> float:
+    """Conservative heading bound implied by a declared uncertainty model.
+
+    Same reading as :func:`_uncertainty_bound_m`, applied to the heading. A model
+    that declares *no* uncertainty gets zero here rather than the planar stopping
+    budget: a metre is not an angle, and substituting one for the other would be a
+    dimensionally meaningless claim that still looked conservative.
+    """
+    if uncertainty.kind == "hard_bound":
+        return max(0.0, uncertainty.sigma_rad)
+    if uncertainty.kind == "gaussian_sigma":
+        # Three sigma, the same declared convention as the planar bound.
+        return 3.0 * uncertainty.sigma_rad
+    return 0.0
+
+
+def _uncertainty_bound_m(uncertainty: UncertaintyModel) -> float:
+    """The conservative planar bound implied by a declared uncertainty model.
+
+    The same reading :meth:`RobotAgent._uncertainty_margin_m` uses for its own
+    body, expressed once so a published claim cannot be tighter than the bound
+    the receiver would apply to it. A model that declares *no* uncertainty gets
+    the declared stopping budget -- never zero, which would be an invented
+    precision.
+    """
+    if uncertainty.kind == "hard_bound":
+        return max(0.0, uncertainty.max_m)
+    if uncertainty.kind == "gaussian_sigma":
+        # Three sigma is a declared, ordinary choice for a bounded operational
+        # envelope. A configured assumption, not a measurement.
+        return 3.0 * uncertainty.sigma_m
+    return 0.0
 
 
 def _inflated_bounds(

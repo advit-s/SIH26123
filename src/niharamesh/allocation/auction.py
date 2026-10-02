@@ -82,6 +82,7 @@ from niharamesh.domain.task import (
 from niharamesh.domain.units import TimeDomain
 
 __all__ = [
+    "WITHDRAWN_PREFIX",
     "AllocationEvent",
     "AllocationEventKind",
     "AllocationKind",
@@ -248,6 +249,12 @@ class TransitionOutcome:
     to_state: TaskState
     from_state: TaskState
     ownership_version: int
+
+
+#: Prefix on an explicit no-bid meaning "this task is off the board for good".
+#: Declared here rather than invented per caller, so a peer can recognise a
+#: withdrawal without parsing prose.
+WITHDRAWN_PREFIX = "withdrawn_"
 
 
 def bid_set_digest(bids: Iterable[TaskBid]) -> str:
@@ -438,6 +445,46 @@ class LocalAuction:
             raise RoundSerialisationError("no allocation round is open")
         model = cost_model if cost_model is not None else self.cost_model
         return compute_bid(task, robot_state, model, streams)
+
+    def note_withdrawn(self, task_id: str, reason: str) -> None:
+        """Record that *task_id* is not on offer, and stop bidding on it.
+
+        Used for a task this robot was handed by the scenario outright. Such a
+        task never appears in a bid set as feasible, so no peer can win it -- but
+        the no-bid has to be *announced*, because a peer that simply heard nothing
+        could not tell "already assigned" from "my message was lost", and would
+        bid for a job somebody else already owns.
+        """
+        if self._round is None:
+            raise RoundSerialisationError("no allocation round is open")
+        record = self._no_bid_for(task_id, f"{WITHDRAWN_PREFIX}{reason}", 0)
+        self._own_bids[task_id] = record
+        self._received.setdefault(task_id, {})[self.robot_id] = record
+
+    def retire_live_bid(self, reason: str) -> None:
+        """Withdraw this robot's own live bid, with a recorded reason.
+
+        Needed for round serialisation: :meth:`close_round` correctly refuses while
+        a bid is live, and the only thing that can clear it is the robot that made
+        it. No timer and no peer does this -- an auction that closed a round
+        unilaterally would drop a reservation peers are still holding.
+
+        The withdrawn bid becomes an explicit no-bid, so peers see the withdrawal
+        rather than the bid simply ceasing to exist.
+        """
+        if self._live_bid_task is None:
+            return
+        task_id = self._live_bid_task
+        self._log(
+            AllocationEventKind.NO_BID_SENT,
+            f"live bid on {task_id} retired: {reason}",
+            task_id=task_id,
+            at_ns=self._round.opened_at_ns if self._round else 0,
+        )
+        record = self._no_bid_for(task_id, f"live_bid_retired:{reason}", 0)
+        self._own_bids[task_id] = record
+        self._received.setdefault(task_id, {})[self.robot_id] = record
+        self._live_bid_task = None
 
     def consider(self, bid: TaskBid) -> TaskBid:
         """Commit at most one live bid for the open round.
@@ -730,6 +777,29 @@ class LocalAuction:
         Returns the resulting :class:`TaskOwnership`, or ``None`` when the award was
         not this robot's, or when committing it would break the one-award-per-round
         rule.
+
+        Re-committing the **same** owner of the same task is idempotent: it
+        refreshes the version and the evidence and returns the same record.
+        Re-awarding the same task to a *different* robot is refused outright,
+        even though the locally recomputed winner says so.
+
+        That refusal is the load-bearing rule here, and it was added because the
+        alternative shipped and failed. Bid costs move as robots drive, so a
+        recomputed winner can differ from the previous round's: measured on
+        ``dynamic-arrivals``, amr-01 held ``t-dyn-0`` at ownership version 1280
+        while amr-02 held the same task at version 320, both from their own
+        locally correct recomputations over their own bid sets. Each robot's map
+        only ever held *its own* claim, so the "already owned by somebody else"
+        guard never fired. Two robots then drove to the same payload and one
+        completion credit was owed for two bodies.
+
+        The auction has no shared register -- there deliberately is no backend to
+        hold one -- so this guard is local and it is honest about being local: it
+        protects a robot from *its own* re-award, and the cross-robot half of the
+        invariant is carried by :meth:`LocalAuction.note_withdrawn`, which every
+        member announces explicitly and which is what the runtime withdraws a task
+        it is already carrying. Both halves are asserted in
+        ``tests/integration/test_task_feed_allocation.py``.
         """
         award = outcome.award
         if award is None or award.winner != self.robot_id:
@@ -754,6 +824,21 @@ class LocalAuction:
                 at_ns=now_ns,
             )
             return None
+        if previous is not None and previous.owner == self.robot_id:
+            # Already mine. Re-commit only advances the version, which is what a
+            # monotonic counter is for, and is otherwise a no-op: it must not
+            # consume this round's single award slot again, or a robot would lose
+            # the ability to win anything at all once it owned something.
+            ownership = previous.model_copy(
+                update={
+                    "ownership_version": previous.ownership_version + 1,
+                    "allocation_round": self._round.index,
+                    "awarded_at_ns": now_ns,
+                    "bid_set_digest": award.bid_set_digest,
+                }
+            )
+            self._ownership[award.task_id] = ownership
+            return ownership
         version = 1 if previous is None else previous.ownership_version + 1
         ownership = TaskOwnership(
             task_id=award.task_id,
@@ -771,6 +856,30 @@ class LocalAuction:
         self._round_awards.append(award)
         self._live_bid_task = None
         return ownership
+
+    def release_ownership(self, task_id: str, reason: str) -> TaskOwnership | None:
+        """Give up ownership of *task_id*, recorded and announced.
+
+        Used when this robot finishes or abandons the job, so the task returns to
+        the pool explicitly rather than by falling out of a bid set. Deliberately
+        not automatic: a robot that forgot what it was doing would quietly release
+        work it is physically carrying, and the reason string is what an operator
+        reads.
+        """
+        previous = self._ownership.get(task_id)
+        if previous is None:
+            return None
+        released = previous.model_copy(update={"state": TaskOwnershipState.RELEASED})
+        self._ownership[task_id] = released
+        self._task_state[task_id] = TaskState.AVAILABLE
+        self._live_bid_task = None
+        self._log(
+            AllocationEventKind.TRANSITION_APPLIED,
+            f"ownership released: {reason}",
+            task_id=task_id,
+            robot_id=self.robot_id,
+        )
+        return released
 
     # ------------------------------------------------------------------
     # consensus

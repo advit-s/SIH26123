@@ -27,12 +27,15 @@ from __future__ import annotations
 
 import hashlib
 import json
+import math
 from dataclasses import dataclass, field
 from typing import Protocol
 
 from niharamesh.agent.runtime import RobotAgent
+from niharamesh.allocation.auction import AllocationMessage
 from niharamesh.clocks import LogicalClock
 from niharamesh.domain.coordination import PeerMessage
+from niharamesh.domain.faults import FaultChannel
 from niharamesh.domain.identity import Membership, RobotSession
 from niharamesh.domain.pose import MotionCommand
 from niharamesh.domain.scenario import Scenario, ScenarioSnapshot
@@ -40,6 +43,7 @@ from niharamesh.domain.units import PROTOCOL_EPOCH
 from niharamesh.ports import Observation
 from niharamesh.simulator.scheduler import DeterministicScheduler
 from niharamesh.simulator.world import World
+from niharamesh.transport.faults import DecisionKind, FaultLayer
 
 __all__ = ["DeterministicHarness", "HarnessResult", "run_scenario"]
 
@@ -156,6 +160,27 @@ class DeterministicHarness:
             )
 
         self._inbox: dict[str, list[PeerMessage]] = {rid: [] for rid in self.agents}
+        self._allocation_inbox: dict[str, list[AllocationMessage]] = {rid: [] for rid in self.agents}
+        #: One fault layer per robot, because ``apply_outbound`` must name the
+        #: remote side of a direction and that is a per-vantage fact. All of them
+        #: are built from the *same* declared coordination-channel specs, so the
+        #: scenario means one thing; only the vantage differs.
+        self._fault_layers = {
+            rid: FaultLayer(
+                tuple(f for f in self.scenario.faults if f.target.channel is FaultChannel.COORDINATION),
+                local_robot_id=rid,
+            )
+            for rid in sorted(self.agents)
+        }
+        self._fault_counts: dict[str, int] = {}
+        #: Frames each agent emitted, by body kind. The harness observing its own
+        #: channel; no agent ever reads this.
+        self._publication_counts: dict[str, dict[str, int]] = {
+            rid: {"peer_state": 0, "peer_intent": 0, "heartbeat": 0} for rid in self.agents
+        }
+        #: ``(deliver_at_ns, sender, message)`` held for a declared delay. Sorted
+        #: by instant then sender so the release order cannot depend on insertion.
+        self._parked: list[tuple[int, str, PeerMessage]] = []
         self.traces = {rid: RobotTrace(robot_id=rid) for rid in self.agents}
         self._events: list[dict[str, object]] = []
         self._seq = 0
@@ -168,34 +193,72 @@ class DeterministicHarness:
     # ------------------------------------------------------------------ loop
 
     def run(self, *, max_sim_time_s: float | None = None) -> HarnessResult:
-        """Advance the world until the deadline or the workload finishes."""
+        """Advance the world until the deadline or the workload finishes.
+
+        Discrete fixed-step semantics, declared once so no caller has to guess:
+
+        * time only ever advances by a whole ``simulation.dt_s`` step -- there is
+          no partial step, so no tick reports a duration the world did not
+          integrate;
+        * at most ``floor(deadline / dt)`` steps execute, so a 0.05 s budget at
+          20 Hz runs two steps (0.04 s) and never a third;
+        * the reported duration is read back from the clock after the last step
+          that actually ran, never from the requested budget.
+
+        The previous loop compared the clock against the deadline at the top of a
+        whole one-second block of inner steps, so it always executed a full
+        one-second block and stopped at the first whole second at or after the
+        deadline. A 0.05 s budget ran a full second. That is not rounding: it is a
+        different experiment, and it is why no short probe was possible.
+        """
         deadline = max_sim_time_s if max_sim_time_s is not None else self.scenario.max_sim_time_s
+        if not math.isfinite(deadline) or deadline < 0.0:
+            raise ValueError(
+                f"max_sim_time_s must be a non-negative finite number of SIM_SECONDS, got {deadline!r}"
+            )
+        step_s = self.scenario.simulation.dt_s
+        budget_ns = round(deadline * 1e9)
+        step_ns = self.scheduler.step_ns
+        # A deadline a whole nanosecond under a step boundary is genuinely less than
+        # the next step, so ``floor`` costs a step. That is the honest reading of a
+        # budget, not a floating-point artefact, and rounding it away would be
+        # executing time the caller did not authorise.
+        budget_steps = budget_ns // step_ns
         required = len(self.scenario.tasks)
 
-        while self.clock.now_s() < deadline:
-            for _ in range(self.scenario.simulation.physics_step_hz):
-                now_ns = self.clock.now_ns()
-                self._apply_faults(now_ns)
+        for _ in range(budget_steps):
+            now_ns = self.clock.now_ns()
+            self._apply_faults(now_ns)
 
-                for robot_id, agent in self.agents.items():
-                    observation = self.world.observe(robot_id)
-                    command = agent.tick(observation)
-                    trace = self.traces[robot_id]
-                    trace.commands += 1
-                    if not command.linear_mps and agent.stop_reason.value != "none":
-                        key = agent.stop_reason.value
-                        trace.stopped_for[key] = trace.stopped_for.get(key, 0) + 1
-                        trace.gate_vetoes += 1
-                    self.world.apply_command(command)
-                    self._collect_completions(robot_id, agent, now_ns)
-                    self._collect_zone_events(robot_id, agent, now_ns)
+            for robot_id, agent in self.agents.items():
+                observation = self.world.observe(robot_id)
+                command = agent.tick(observation)
+                trace = self.traces[robot_id]
+                trace.commands += 1
+                if not command.linear_mps and agent.stop_reason.value != "none":
+                    key = agent.stop_reason.value
+                    trace.stopped_for[key] = trace.stopped_for.get(key, 0) + 1
+                    trace.gate_vetoes += 1
+                self.world.apply_command(command)
+                self._collect_completions(robot_id, agent, now_ns)
+                self._collect_zone_events(robot_id, agent, now_ns)
 
-                self._drain_outboxes()
-                self._deliver()
-                self.world.step(self.scenario.simulation.dt_s)
-                self.clock.advance_seconds(self.scenario.simulation.dt_s)
-                if required and self._completed_count() >= required:
-                    break
+            self._publish_all(now_ns)
+            self._drain_outboxes(now_ns)
+            self._release_parked(now_ns)
+            self._deliver()
+            # The award is recomputed only after this tick's bids and
+            # announcements have actually landed. Computing it inside the tick
+            # would price the award off the previous tick's bid set and then
+            # report it as this tick's decision.
+            for agent in self.agents.values():
+                agent.settle_allocation(now_ns)
+            self.world.step(step_s)
+            self.clock.advance_seconds(step_s)
+            # The scheduler is the run's own step book. Advancing it here keeps its
+            # count and its logical stamp identical to the world's, so neither can
+            # drift away from the duration this run reports.
+            self.scheduler.advance(1)
             if required and self._completed_count() >= required:
                 break
 
@@ -220,6 +283,24 @@ class DeterministicHarness:
             self._credited.add(key)
             self.traces[robot_id].tasks_completed.append(task_id)
             self._record("task_completed", task_id, now_ns, robot_id=robot_id)
+
+    def record_publication_counts(self) -> dict[str, dict[str, int]]:
+        """Frames each agent emits, by body kind, for the rest of the run.
+
+        Counts what the **agents** produced, which is a different question from what
+        a receiver kept: a receiver holds one freshness entry per peer no matter how
+        many messages arrived, so its table cannot measure cadence. This is the
+        harness observing its own channel, not an agent reading a peer's state.
+        """
+        return self._publication_counts
+
+    def _count_publication(self, sender: str, message: PeerMessage) -> None:
+        counts = self._publication_counts.get(sender)
+        if counts is None:
+            return
+        kind = message.body_kind
+        if kind in counts:
+            counts[kind] += 1
 
     def _collect_zone_events(self, robot_id: str, agent: RobotAgent, now_ns: int) -> None:
         """Record zone entry and release from the agent's own declarations."""
@@ -255,19 +336,78 @@ class DeterministicHarness:
                 )
                 self._record("obstacle_inserted", fault.fault_id, now_ns, x=x, y=y)
 
-    def _publish(self, robot_id: str, now_ns: int, command: MotionCommand) -> None:
-        """No state broadcast is synthesised here.
+    def _publish_all(self, now_ns: int) -> None:
+        """Route each agent's **own** publications. The harness invents none.
 
-        Real process mode has each agent publish its own velocity through the
-        socket transport. The deterministic harness deliberately does *not* fake
-        one: inventing a message the agent never produced would make the recorded
-        evidence claim more communication than actually happened. Coordination
-        still works because it runs over the protocol outbox, which the agents
-        themselves fill.
+        Real process mode has every agent publish its own state and intent over
+        the socket transport. This harness used to fake nothing at all, which was
+        defensible but left the freshness path inert: no ``peer_state`` meant
+        :meth:`ZoneProtocol.may_enter`'s suspend guard never fired in any harness
+        run, so every harness test asserted a weaker property than process mode
+        gives.
+
+        What the harness does is *schedule and route*: it takes the messages an
+        agent produced, applies the declared coordination-channel faults to them,
+        and hands them to the declared recipients. It never fills in a pose, an
+        ownership or a clearance. A peer therefore only ever learns what its peer
+        said about itself.
         """
-        del robot_id, now_ns, command
+        for sender in sorted(self.agents):
+            publications = self.agents[sender].publications
+            if not publications:
+                continue
+            for message in publications:
+                self._count_publication(sender, message)
+                for target in sorted(self.membership.members):
+                    if target != sender:
+                        self._route(sender, target, message, now_ns)
+            publications.clear()
 
-    def _drain_outboxes(self) -> None:
+    def _route(self, sender: str, target: str, message: PeerMessage, now_ns: int) -> None:
+        """Put one genuine message through the declared directed fault layer.
+
+        The decision engine is :class:`~niharamesh.transport.faults.FaultLayer` --
+        the *same* class the process transport uses -- so a scenario means the
+        same thing in both modes. Each robot gets its own instance because
+        ``apply_outbound`` must name the remote side of a direction, which is a
+        per-vantage fact.
+
+        Declared mode difference, stated rather than hidden: there are no sockets
+        here, so ``DELIVER_AT`` in the future is honoured by parking the message
+        on the logical clock and releasing it when that instant arrives. The
+        *decision* is identical; only the delivery mechanism differs.
+        """
+        decision = self._fault_layers[sender].apply_outbound(target, message, now_ns)
+        if decision.dropped:
+            self._fault_counts["drop"] = self._fault_counts.get("drop", 0) + 1
+            return
+        if decision.kind is DecisionKind.HOLD:
+            # The layer parked it; it comes back out of that layer's own park.
+            return
+        copies = max(1, decision.copies)
+        for _ in range(copies):
+            if decision.deliver_at_ns <= now_ns:
+                self._inbox[target].append(message)
+            else:
+                self._parked.append((decision.deliver_at_ns, sender, message))
+        self._fault_counts["delivered"] = self._fault_counts.get("delivered", 0) + copies
+
+    def _release_parked(self, now_ns: int) -> None:
+        """Release reorder/delayed traffic whose hold has elapsed, in a stable order."""
+        for sender in sorted(self._fault_layers):
+            for pending in self._fault_layers[sender].drain(now_ns):
+                remote = pending.peer_id
+                if pending.direction == "outbound":
+                    self._inbox[remote].append(pending.message)
+        due = [item for item in self._parked if item[0] <= now_ns]
+        if due:
+            self._parked = [item for item in self._parked if item[0] > now_ns]
+            for _at, _sender, message in sorted(due, key=lambda item: (item[0], item[1])):
+                for target in sorted(self.membership.members):
+                    if target != message.envelope.sender:
+                        self._inbox[target].append(message)
+
+    def _drain_outboxes(self, now_ns: int) -> None:
         """Route only the framed messages each coordinator actually emitted.
 
         Collect every sender before delivery so a reply produced by ingest waits
@@ -278,8 +418,51 @@ class DeterministicHarness:
         for sender in sorted(self.agents):
             outbox = self.agents[sender].coordinator.outbox
             for target, message in outbox:
-                self._inbox[target].append(message)
+                self._route(sender, target, message, now_ns)
             outbox.clear()
+        self._drain_allocation_outboxes(now_ns)
+
+    def _drain_allocation_outboxes(self, now_ns: int) -> None:
+        """Route auction traffic, which is a *different* wire record.
+
+        :class:`~niharamesh.allocation.auction.AllocationMessage` is not a
+        ``PeerMessage``: the domain body union carries no auction body. The
+        mapping point is documented in that module and the harness is the place
+        it is actually exercised. Auction messages go through the same directed
+        fault layer as protocol traffic -- a partition must silence bids and
+        awards exactly as it silences grants, or the scenario would be testing
+        two different networks.
+        """
+        for sender in sorted(self.agents):
+            agent = self.agents[sender]
+            while agent.auction_outbox:
+                target, message = agent.auction_outbox.pop(0)
+                self._route_allocation(sender, target, message, now_ns)
+
+    def _route_allocation(self, sender: str, target: str, message: AllocationMessage, now_ns: int) -> None:
+        """Apply the same directed fault decision to an auction record.
+
+        ``FaultLayer`` is typed to ``PeerMessage``, so the auction record is
+        carried through as its own type and the *decision* -- the part that
+        defines what a partition means -- is taken from the same engine and the
+        same declared spec. This is not a second fault implementation: it calls
+        ``FaultLayer.active_faults`` for the directed edge and applies the one
+        unambiguous rule a partition has, namely that the direction is silenced.
+        Loss, duplicate, delay and reorder on auction traffic are deliberately
+        *not* simulated here, and saying so is better than approximating them.
+        """
+        active = self._fault_layers[sender].active_faults(now_ns)
+        for fault in active:
+            if not fault.silences_traffic:
+                continue
+            if fault.sender not in (None, sender):
+                continue
+            if fault.receiver not in (None, target):
+                continue
+            self._fault_counts["drop"] = self._fault_counts.get("drop", 0) + 1
+            return
+        self._allocation_inbox[target].append(message)
+        self._fault_counts["delivered"] = self._fault_counts.get("delivered", 0) + 1
 
     def _deliver(self) -> None:
         """Move queued messages to their recipients and ingest them.
@@ -292,6 +475,11 @@ class DeterministicHarness:
             self._inbox[target] = []
             for message in sorted(queued, key=lambda m: (m.envelope.sender, m.envelope.seq)):
                 self.agents[target].ingest(message)
+        for target in sorted(self._allocation_inbox):
+            pending_bids = self._allocation_inbox[target]
+            self._allocation_inbox[target] = []
+            for bid in pending_bids:
+                self.agents[target].ingest_allocation(bid)
 
     def exchange(self, sender: str, recipients: list[str], message: PeerMessage) -> None:
         """Deliver *message* from *sender* to each recipient. Deterministic order."""

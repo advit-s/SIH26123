@@ -59,6 +59,7 @@ from niharamesh.domain.coordination import (
     ZoneReleaseBody,
     ZoneRequestBody,
     grant_identity,
+    transaction_id,
 )
 from niharamesh.domain.identity import Membership, MembershipState
 from niharamesh.domain.map import ZoneState
@@ -344,6 +345,11 @@ class ZoneVoter:
         self._refusals: dict[str, Refusal] = {}
         self._queues: dict[str, list[QueueEntry]] = {}
         self._release_seen: dict[str, set[str]] = {}
+        #: Grant identities whose zone was fully released and reconciled. A bounded
+        #: tombstone: it exists so a replayed ``zone_occupy`` for a *finished*
+        #: transaction is refused, while an unrecorded occupancy for a transaction
+        #: this voter merely lost is still adopted. See :meth:`apply_occupy`.
+        self._released_grants: set[str] = set()
         self._highest_version: dict[tuple[str, str], int] = {}
         self._recovery: RecoveryReport = RecoveryReport(
             recovery_state=RecoveryState.UNKNOWN_STOPPED,
@@ -886,13 +892,39 @@ class ZoneVoter:
         )
 
     def apply_occupy(self, body: ZoneOccupyBody) -> None:
-        """Declaration of physical entry. Moves the zone to OCCUPIED."""
+        """Declaration of physical entry. Moves the zone to OCCUPIED.
+
+        An occupancy declaration for a zone this voter has **no record of** is
+        adopted rather than discarded. That is a deliberate change from the
+        previous behaviour, which returned on a missing record.
+
+        The reason is that the only correct direction for this message is
+        ``PROMISED -> OCCUPIED``, never ``FREE -> FREE``. A missing record means
+        this voter has lost its own book of promises -- by a lost cancellation, a
+        restart, or a message that never arrived -- and the body making the
+        declaration is inside the protected geometry right now. Discarding that
+        leaves the voter reading ``FREE`` while a robot is physically in the
+        aisle, which is the precise state in which two robots can be granted the
+        same zone. Recovering to ``OCCUPIED`` is the conservative direction: it can
+        only ever refuse somebody.
+
+        The grant identity is still checked against this voter's own record, and a
+        record that exists but belongs to a *different* transaction is still
+        refused -- a mismatched grant must never overwrite a live one.
+        """
         record = self._records.get(body.zone_id)
-        if record is None or record.grant_id != body.grant_id:
+        if record is not None and record.grant_id != body.grant_id:
             return
-        if record.state is ZoneState.FENCED or body.occupancy_seq < record.occupancy_seq:
+        if record is None and body.grant_id in self._released_grants:
+            # This grant completed and was released. An occupancy declaration for it
+            # is a replay, not news, and adopting it would re-occupy an aisle every
+            # voter has already declared clear.
+            return
+        if record is not None and (
+            record.state is ZoneState.FENCED or body.occupancy_seq < record.occupancy_seq
+        ):
             return  # fenced is terminal; a stale enter/exit never applies backwards
-        self.journal.append(
+        record_id = self.journal.append(
             RECORD_OCCUPANCY,
             {
                 "zone_id": body.zone_id,
@@ -901,8 +933,57 @@ class ZoneVoter:
                 "occupancy_seq": body.occupancy_seq,
                 "grant_id": body.grant_id,
                 "from": self.robot_id,
+                "adopted_without_prior_record": record is None,
             },
         )
+        if record is None:
+            # No prior promise of our own, yet the body is declaring itself inside.
+            # Adopt it as ``OCCUPIED`` -- see the method docstring -- with the
+            # identity the declaration itself carries.
+            #
+            # Unless adopting it would leave this voter owing the **same requester**
+            # two outstanding grants. That is not a corner case: it is invariant 6,
+            # "at most one outstanding grant per robot, globally", and the property
+            # suite found it -- a fuzzed ordering has a requester collecting a
+            # promise for one zone and then declaring occupancy in another, leaving
+            # this voter holding two. Invariant 6 is checked on every solicitation,
+            # so the one place that can break it without passing through a check is
+            # this adoption.
+            #
+            # Refusing is the conservative choice *for this specific case*, and it
+            # leaves a hole the other branch above is careful about: this zone then
+            # reads ``FREE`` here while a body is inside it. That hole is bounded to
+            # "the peer already holds an authority elsewhere from me", and it is
+            # recorded rather than hidden. Which of the two violations to commit is a
+            # judgement, and it is stated rather than left implicit: an aisle nobody
+            # arbitrates can stall, whereas two overlapping authorities cannot be
+            # undone once granted.
+            for other in self._records.values():
+                if (
+                    other.zone_id != body.zone_id
+                    and other.requester == body.requester
+                    and other.state in (ZoneState.PROMISED, ZoneState.OCCUPIED)
+                ):
+                    return
+            # An adopted record must carry a real persistence id: the grant it
+            # answers later echoes this back, and an empty id would fail
+            # ``ZoneGrantBody``'s own validation -- turning a conservative recovery
+            # into a hard failure on the next solicitation.
+            persistence_record_id = record_id or f"adopted:{body.grant_id}"
+            record = ZoneRecord(
+                zone_id=body.zone_id,
+                state=ZoneState.OCCUPIED,
+                requester=body.requester,
+                requester_session=body.requester_session,
+                request_version=body.request_version,
+                grant_id=body.grant_id,
+                txn=transaction_id(body.run_id, body.request_version, body.zone_id, body.requester),
+                persistence_record_id=persistence_record_id,
+                occupancy_seq=body.occupancy_seq,
+            )
+            self._records[body.zone_id] = record
+            self._highest_version[(body.zone_id, body.requester)] = body.request_version
+            return
         record.occupancy_seq = body.occupancy_seq
         record.state = ZoneState.OCCUPIED
 
@@ -946,6 +1027,15 @@ class ZoneVoter:
         free = set(self.required_voters).issubset(record.released_by)
         if free:
             record.state = ZoneState.FREE
+            # Remember that *this grant* is finished. Dropping the record is what
+            # lets the next request in, but it also removes the only thing that
+            # could distinguish a replayed ``zone_occupy`` for a transaction that
+            # completed from one for a record this voter merely lost. Without the
+            # tombstone, adopting an unrecorded occupancy (see
+            #: :meth:`apply_occupy`) would resurrect a zone that was properly
+            # released -- the exact conservatism being traded for, in the other
+            # direction.
+            self._released_grants.add(record.grant_id)
             self._records.pop(body.zone_id, None)
             self._release_seen.pop(body.zone_id, None)
         relay: tuple[str, ...] = ()

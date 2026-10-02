@@ -831,9 +831,24 @@ class ZoneProtocol:
         )
         self.outbox.append((peer, build_message(envelope, body)))
 
-    def _next_seq(self) -> int:
+    def next_sequence(self) -> int:
+        """The next per-sender monotonic sequence number.
+
+        Public because **every** message this robot emits must be numbered from
+        this one counter, including the state and intent publications its agent
+        produces. A second counter per message class looks harmless and is not: the
+        receiver's replay window is keyed on ``(sender, seq)`` across *all* kinds, so
+        a ``peer_state`` at seq 1 followed by a ``zone_request`` also at seq 1 reads
+        as a replay and the request is refused. Measured: with a separate
+        publication counter, ``amr-02``'s first ``zone_request`` was rejected by
+        ``amr-01`` as ``SEQUENCE_REPLAY``, so no canonical acquisition ever
+        completed and the junction sat idle for the whole run.
+        """
         self._seq += 1
         return self._seq
+
+    #: Internal alias retained so existing call sites read unchanged.
+    _next_seq = next_sequence
 
     def _suspended_peers(self) -> tuple[str, ...]:
         required = set(self.voter.required_voters) - {self.robot_id}

@@ -679,11 +679,35 @@ def test_forward_clearance_is_measured_in_the_robots_own_frame(
     assert 0.0 < clearance <= fleet.scenario.simulation.sensor.range_m + 1e-9
 
     # Turning the robot must turn the window with it, not move it.
-    east = _observation_at(observation, x=20.0, y=11.9, theta=0.0, stopped=True)
-    north = _observation_at(observation, x=20.0, y=11.9, theta=math.pi / 2.0, stopped=True)
+    #
+    # Driven by a **synthetic scan** rather than the live one. The live scan's
+    # geometry depends on wherever this robot happened to be after one second, and
+    # an assertion of "the two headings give different minima" is then satisfied or
+    # broken by coincidence -- it passed only because the shortest ray happened to
+    # fall outside both windows. With one obstacle ray at a known bearing the
+    # property is tested directly: a body-frame window finds it when the robot
+    # faces it and reports no evidence at all when it faces away.
+    ahead = _observation_at(
+        observation,
+        x=20.0,
+        y=11.9,
+        theta=0.0,
+        stopped=True,
+        rays=_rays_at(0.0, 0.9),
+    )
+    away = _observation_at(
+        observation,
+        x=20.0,
+        y=11.9,
+        theta=math.pi,
+        stopped=True,
+        rays=_rays_at(0.0, 0.9),
+    )
     assert heading is not None
-    assert agent._forward_clearance_m(east) != agent._forward_clearance_m(north), (
-        "a fixed world-frame wedge would give both headings the same reading"
+    assert agent._forward_clearance_m(ahead) == pytest.approx(0.9)
+    assert agent._forward_clearance_m(away) is None, (
+        "an obstacle dead ahead must not be reported when the robot faces the other way; "
+        "a fixed world-frame wedge would report it for both headings"
     )
 
 
@@ -868,8 +892,21 @@ def _judge_obstacles(gate: SafetyGate, body: OrientedBox, *, linear: float, angu
     return gate.evaluate(command, 0, context)
 
 
+def _rays_at(bearing_rad: float, distance_m: float) -> tuple[object, ...]:
+    """A one-ray world-frame scan, as the sensor model would deliver it."""
+    from niharamesh.ports import RangeRay  # local
+
+    return (RangeRay(bearing_rad, distance_m, "obstacle", 0, 0),)
+
+
 def _observation_at(
-    observation: object, *, x: float, y: float, theta: float, stopped: bool = False
+    observation: object,
+    *,
+    x: float,
+    y: float,
+    theta: float,
+    stopped: bool = False,
+    rays: tuple[object, ...] | None = None,
 ) -> object:
     """A real observation with its pose estimate moved, as the localiser would.
 
@@ -902,13 +939,28 @@ def _observation_at(
             actuation_enabled=True,
             actuator=motion.actuator,
         )
+    scan = observation.sensor if rays is None else _scan_with(observation, rays)
     return Observation(
         robot_id=observation.robot_id,
         pose_estimate=estimate,
         motion=motion,
-        sensor=observation.sensor,
+        sensor=scan,
         battery_fraction=observation.battery_fraction,
         sim_time_ns=observation.sim_time_ns,
+    )
+
+
+def _scan_with(observation: object, rays: tuple[object, ...]) -> object:
+    """A real ``SensorObservation`` carrying *rays* instead of the live scan."""
+    from niharamesh.ports import Observation, SensorObservation  # local
+
+    assert isinstance(observation, Observation)
+    live = observation.sensor
+    return SensorObservation(
+        robot_id=live.robot_id,
+        observed_at_ns=live.observed_at_ns,
+        delivered_at_ns=live.delivered_at_ns,
+        rays=rays,
     )
 
 

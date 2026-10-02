@@ -1,0 +1,374 @@
+/*
+ * NĪHĀRAMESH operator cockpit — visual foundation.
+ *
+ * DESIGN INTENT (read this before editing any colour):
+ *
+ * The subject is a *warehouse floor*. A floor plan is drawn with a ruler, a
+ * tape and floor paint: survey grid, hatched keep-clear areas, stencilled
+ * numbers, solid double bars at stop lines. So the console is built from that
+ * paint language rather than from card-and-shadow SaaS chrome. Every panel is
+ * a machine panel with corner ticks; every unsafe state is hatched, not just
+ * red.
+ *
+ * Colour is a scarce, *semantic* resource and is deliberately rationed:
+ *   teal  -> normal coordination (granted, moving, fresh)
+ *   amber -> attention (stale, withheld, degraded, pending)
+ *   red   -> confirmed fault (violation, unsafe, crashed, dropped)
+ *   steel -> EVALUATOR TRUTH overlay, and nothing else. An operator must never
+ *            mistake an evaluator verdict for agent knowledge, so steel is
+ *            spent only on the evaluator layer.
+ * Recorded replay gets no new hue: it is separated by a hatch band + stencil
+ * text + a ruled timeline, because "is this live?" must never be a colour test.
+ *
+ * Light theme is not a darkened dark theme: it is a *printed floor plan on
+ * paper* - bone-white slab, ink-black stencils, the same paint marks.
+ */
+
+@import "@fontsource/ibm-plex-sans/400.css";
+@import "@fontsource/ibm-plex-sans/500.css";
+@import "@fontsource/ibm-plex-sans/600.css";
+@import "@fontsource/ibm-plex-sans/700.css";
+@import "@fontsource/ibm-plex-mono/400.css";
+@import "@fontsource/ibm-plex-mono/500.css";
+@import "@fontsource/ibm-plex-mono/600.css";
+@import "tailwindcss";
+
+/* ---------------------------------------------------------------------------
+ * Raw slots. Dark is the default operations view; `[data-theme="light"]` is the
+ * accessible printed view. `index.html` ships `data-theme="dark"` on <html> so
+ * the first paint is never unstyled, and `App` keeps the attribute in sync with
+ * the persisted preference.
+ * ------------------------------------------------------------------------ */
+:root,
+[data-theme="dark"] {
+  color-scheme: dark;
+
+  --nm-void: #080b0d; /* behind everything; the unlit aisle */
+  --nm-slab: #0d1216; /* the floor itself / app background */
+  --nm-panel: #12181d; /* machine panel face */
+  --nm-raised: #192127; /* raised panel face, inputs */
+  --nm-rule: #26313a; /* hairline rule */
+  --nm-rule-strong: #38474f; /* emphasized rule, focus ring base */
+
+  --nm-ink: #e7eef2; /* primary text              14.8:1 on --nm-panel */
+  --nm-ink-2: #aab9c2; /* secondary text             7.1:1 */
+  --nm-ink-3: #7b8b95; /* muted / stencil            4.6:1 */
+  --nm-ink-4: #56646d; /* disabled, still legible    2.4:1 (non-text only) */
+
+  --nm-teal: #3ec9b6;
+  --nm-teal-dim: #1d7a71;
+  --nm-teal-wash: #0f2c2c;
+
+  --nm-amber: #e5ab3d;
+  --nm-amber-dim: #8a631b;
+  --nm-amber-wash: #2e2312;
+
+  --nm-red: #ec5f51;
+  --nm-red-dim: #93362c;
+  --nm-red-wash: #2f1512;
+
+  --nm-steel: #86abd2; /* EVALUATOR TRUTH ONLY */
+  --nm-steel-dim: #3f6488;
+  --nm-steel-wash: #14212e;
+
+  --nm-paint: #6f8896; /* floor paint: aisle centrelines, marks */
+  --nm-grid: #1a2229; /* 1 m survey grid on the floor */
+}
+
+[data-theme="light"] {
+  color-scheme: light;
+
+  /* A printed floor plan on paper: the surround is noticeably grey so panels
+   * read as separate sheets, and the hairlines are darker so structure survives
+   * a low-quality print. */
+  --nm-void: #c9d2d6;
+  --nm-slab: #e6ebed;
+  --nm-panel: #fbfcfc;
+  --nm-raised: #ffffff;
+  --nm-rule: #bfcbd0;
+  --nm-rule-strong: #8b9aa2;
+
+  --nm-ink: #10171b; /*  16.9:1 on --nm-panel */
+  --nm-ink-2: #3c4a52; /*   8.6:1 */
+  --nm-ink-3: #5c6b74; /*   5.2:1 */
+  --nm-ink-4: #8d9aa1; /* non-text only */
+
+  --nm-teal: #0b6d62;
+  --nm-teal-dim: #7fc4ba;
+  --nm-teal-wash: #dcefee;
+
+  --nm-amber: #855200;
+  --nm-amber-dim: #d6ad63;
+  --nm-amber-wash: #f6ecd9;
+
+  --nm-red: #a52011;
+  --nm-red-dim: #dd8b81;
+  --nm-red-wash: #f8e2df;
+
+  --nm-steel: #2c5c8a;
+  --nm-steel-dim: #8fb2d0;
+  --nm-steel-wash: #e0ebf4;
+
+  --nm-paint: #5c7480;
+  --nm-grid: #dde3e6;
+}
+
+/* Expose the slots to Tailwind v4's utility generator. `inline` keeps them as
+ * var() references so the theme toggle repaints without re-generating CSS. */
+@theme inline {
+  --color-void: var(--nm-void);
+  --color-slab: var(--nm-slab);
+  --color-panel: var(--nm-panel);
+  --color-raised: var(--nm-raised);
+  --color-rule: var(--nm-rule);
+  --color-rule-strong: var(--nm-rule-strong);
+
+  --color-ink: var(--nm-ink);
+  --color-ink-2: var(--nm-ink-2);
+  --color-ink-3: var(--nm-ink-3);
+  --color-ink-4: var(--nm-ink-4);
+
+  --color-teal: var(--nm-teal);
+  --color-teal-dim: var(--nm-teal-dim);
+  --color-teal-wash: var(--nm-teal-wash);
+  --color-amber: var(--nm-amber);
+  --color-amber-dim: var(--nm-amber-dim);
+  --color-amber-wash: var(--nm-amber-wash);
+  --color-red: var(--nm-red);
+  --color-red-dim: var(--nm-red-dim);
+  --color-red-wash: var(--nm-red-wash);
+  --color-steel: var(--nm-steel);
+  --color-steel-dim: var(--nm-steel-dim);
+  --color-steel-wash: var(--nm-steel-wash);
+  --color-paint: var(--nm-paint);
+  --color-grid: var(--nm-grid);
+
+  --font-sans: "IBM Plex Sans", ui-sans-serif, system-ui, sans-serif;
+  --font-stencil: "IBM Plex Sans", ui-sans-serif, system-ui, sans-serif;
+  --font-mono: "IBM Plex Mono", ui-monospace, "Cascadia Mono", monospace;
+
+  --radius-slab: 2px;
+}
+
+/* --------------------------------------------------------------------------
+ * Base
+ * ----------------------------------------------------------------------- */
+@layer base {
+  *,
+  *::before,
+  *::after {
+    border-color: var(--nm-rule);
+  }
+
+  html,
+  body,
+  #root {
+    height: 100%;
+  }
+
+  body {
+    margin: 0;
+    background: var(--nm-slab);
+    color: var(--nm-ink);
+    font-family: var(--font-sans);
+    font-size: 13px;
+    line-height: 1.45;
+    -webkit-font-smoothing: antialiased;
+    text-rendering: optimizeLegibility;
+    overflow: hidden;
+  }
+
+  /* Every numeric, identifier, coordinate and digest is monospaced and must
+   * line up in a column. This is a correctness affordance, not a style. */
+  .num,
+  code,
+  kbd,
+  samp {
+    font-family: var(--font-mono);
+    font-variant-numeric: tabular-nums;
+    font-feature-settings: "zero" 1;
+  }
+
+  :focus-visible {
+    outline: 2px solid var(--nm-amber);
+    outline-offset: 1px;
+  }
+
+  button:disabled {
+    cursor: not-allowed;
+  }
+
+  ::-webkit-scrollbar {
+    width: 10px;
+    height: 10px;
+  }
+  ::-webkit-scrollbar-track {
+    background: transparent;
+  }
+  ::-webkit-scrollbar-thumb {
+    background: var(--nm-rule);
+    border: 3px solid transparent;
+    background-clip: content-box;
+    border-radius: 6px;
+  }
+  ::-webkit-scrollbar-thumb:hover {
+    background: var(--nm-rule-strong);
+    background-clip: content-box;
+  }
+}
+
+/* --------------------------------------------------------------------------
+ * Components. Small, named, and specific enough that no utility soup can
+ * accidentally beat them.
+ * ----------------------------------------------------------------------- */
+
+/* Machine panel: flat face, hairline rule, corner ticks like a drawing frame. */
+@utility panel {
+  position: relative;
+  background: var(--nm-panel);
+  border: 1px solid var(--nm-rule);
+  border-radius: var(--radius-slab);
+}
+
+@utility panel-ticks {
+  position: relative;
+
+  &::before,
+  &::after {
+    content: "";
+    position: absolute;
+    width: 7px;
+    height: 7px;
+    pointer-events: none;
+    border-color: var(--nm-rule-strong);
+  }
+  &::before {
+    top: -1px;
+    left: -1px;
+    border-top: 1px solid;
+    border-left: 1px solid;
+  }
+  &::after {
+    bottom: -1px;
+    right: -1px;
+    border-bottom: 1px solid;
+    border-right: 1px solid;
+  }
+}
+
+/* Floor paint: hazard hatch. THE non-colour signal for "withheld / blocked /
+ * not granted". Used on the map, in the zone inspector and in table cells. */
+@utility hatch-amber {
+  background-image: repeating-linear-gradient(
+    45deg,
+    transparent 0 5px,
+    color-mix(in oklab, var(--nm-amber) 34%, transparent) 5px 7px
+  );
+}
+@utility hatch-red {
+  background-image: repeating-linear-gradient(
+    45deg,
+    transparent 0 5px,
+    color-mix(in oklab, var(--nm-red) 38%, transparent) 5px 7px
+  );
+}
+@utility hatch-steel {
+  background-image: repeating-linear-gradient(
+    -45deg,
+    transparent 0 5px,
+    color-mix(in oklab, var(--nm-steel) 34%, transparent) 5px 7px
+  );
+}
+@utility dots-estimated {
+  background-image: radial-gradient(
+    currentColor 0.9px,
+    transparent 1px
+  );
+  background-size: 6px 6px;
+}
+
+/* Recorded playback: a hatch band + stencil. Never a new hue. */
+@utility replay-band {
+  background-image: repeating-linear-gradient(
+    -45deg,
+    transparent 0 6px,
+    color-mix(in oklab, var(--nm-ink) 12%, transparent) 6px 9px
+  );
+}
+
+@utility stencil {
+  font-family: var(--font-sans);
+  font-weight: 600;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+}
+
+@utility tabular {
+  font-variant-numeric: tabular-nums;
+}
+
+/* Long event/task/fault lists: skip layout+paint for off-screen rows. */
+@utility long-list {
+  content-visibility: auto;
+  contain-intrinsic-size: 0 26px;
+}
+
+@utility scroll-y {
+  overflow-y: auto;
+  overscroll-behavior: contain;
+}
+
+/* --------------------------------------------------------------------------
+ * Motion. Three motions exist in this product and no more:
+ *   1. robots translate on the Pixi ticker
+ *   2. the replay evidence cursor sweeps the timeline
+ *   3. the connection chip breathes ONLY while reconnecting
+ * Anything else is an instant state change - a console that fidgets is a
+ * console that hides a state change.
+ * ----------------------------------------------------------------------- */
+@keyframes nm-breathe {
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.35;
+  }
+}
+
+@keyframes nm-sweep {
+  from {
+    transform: translateX(-100%);
+  }
+  to {
+    transform: translateX(340%);
+  }
+}
+
+@utility breathe {
+  animation: nm-breathe 1.6s ease-in-out infinite;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.001ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.001ms !important;
+    scroll-behavior: auto !important;
+  }
+}
+
+/* Screen-reader-only, used for the canvas's textual alternative headings. */
+@utility sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+  border-width: 0;
+}

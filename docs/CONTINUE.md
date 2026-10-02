@@ -2,22 +2,34 @@
 
 ## Where this is right now
 
-`feat/niharamesh-platform`. Head is the Milestone B commit below; Milestone A is
-`b492bfd`. Working tree clean apart from two deliberately untracked files:
-`NiharaMesh_OpenCode_Master_Build_Prompt.md` and
-`docs/superpowers/plans/2026-10-02-opencode-continuation-prompt.md`.
+`feat/niharamesh-platform`. Head is `eee4502` ("Close the Gate B gaps: task feed,
+peer publication, deadlines, real safety"); Milestone B is `6b21f40`, Milestone A is
+`b492bfd`. Working tree clean apart from three deliberately untracked prompt files:
+`NiharaMesh_OpenCode_Master_Build_Prompt.md`,
+`docs/superpowers/plans/2026-10-02-opencode-continuation-prompt.md` and
+`docs/superpowers/plans/2026-10-02-opencode-next-after-milestone-b.md`.
 
-Verified in this checkout after Milestone B:
+Verified in this checkout after the three gates of 2026-10-03:
 
 ```powershell
-.\.venv\Scripts\python.exe -m pytest -q -p no:cacheprovider    # 526 passed
+.\.venv\Scripts\python.exe -m pytest -q -p no:cacheprovider --timeout=900
+# 570 passed, 1 skipped in 341.50s
 .\.venv\Scripts\python.exe -m ruff check src tests scripts --no-cache   # clean
-.\.venv\Scripts\python.exe -m mypy --cache-dir var/mypy-c     # 71 modules, clean
-pnpm --filter @niharamesh/web exec tsc --noEmit                # exit 0
-node packages/contracts/generate.mjs                          # byte-identical on repeat
+.\.venv\Scripts\python.exe -m mypy --cache-dir var/mypy-next              # 71 modules, clean
+.\.venv\Scripts\python.exe -m pytest -q -p no:cacheprovider tests/network
+# 6 passed in 9.67s
 ```
 
 If any of those disagree with reality, believe the command, not this file.
+
+**The one skip is not a hidden failure.** It is
+`test_two_robots_never_occupy_the_same_space`, which skips when the collision it
+documents no longer reproduces. The defect, its measurement and its root cause are
+preserved in that file's docstring.
+
+**The single most important thing this file has to say:** Milestones C–G are
+untouched, and **no authored scenario has yet reached `success`**. The ≥20 %
+makespan target remains **unmeasured**.
 
 ---
 
@@ -105,18 +117,31 @@ every time, and the junction never cleared once.
 
 ### 27 — A rejected attempt never withdrew the promises it had collected
 
-`ZoneRequester.tick` emitted cancellation only when `durably_non_executable`. The
-protocol deliberately retries with a **fresh** `request_version` (see `retry_due`),
-so a voter still holding a promise from the failed attempt refuses the retry with
-`ZONE_PROMISED` — same zone, same robot. The promise can never match the new
-version, so the retry can never succeed: a livelock, not a leak. A rejected attempt
-now cancels the promises it collected, which is safe precisely because it never
-reached `GRANTED`, so nobody could have entered on it.
+**SUPERSEDED 2026-10-03. The defect described here does not exist.**
 
-> **This is the one change in `src/niharamesh/coordination/`, which that package's
-> reviewer treats as read-only.** It is surgical and it is covered by the existing
-> 89 protocol and property tests, but it needs an independent protocol review before
-> it is relied on. It is the first item on the review list.
+> `ZoneRequester.tick` emitted cancellation only when `durably_non_executable`. The
+> protocol deliberately retries with a **fresh** `request_version` (see `retry_due`),
+> so a voter still holding a promise from the failed attempt refuses the retry with
+> `ZONE_PROMISED` — same zone, same robot. The promise can never match the new
+> version, so the retry can never succeed: a livelock, not a leak. A rejected attempt
+> now cancels the promises it collected, which is safe precisely because it never
+> reached `GRANTED`, so nobody could have entered on it.
+
+The independent protocol reviewer fuzzed the real `ZoneRequester` and `ZoneVoter`
+(120 seeds x 120 steps, adversarial drop/duplicate/delay) and measured **6 034
+observations with a non-empty `cancel_targets`, of which none had phase `REJECTED`**.
+The added condition held 14 095 times and **every single time with an empty target
+set**. `REJECTED` is only reachable with nothing to reconcile, so the branch could
+never emit a message the pre-existing durable branch would not.
+
+The branch is **reverted**. What actually got fixed in that area is a different,
+real defect the review found: cancellation was sent once and never re-sent, which
+wedged the zone permanently for a robot that lost one frame. See
+`docs/KNOWN_LIMITATIONS.md` item 12 and the Gate 1 section of `docs/STATUS.md`.
+
+> **This was the one change in `src/niharamesh/coordination/` outside the
+> integration owner's own files, and it is now reviewed. It removed nothing real
+> and added nothing real, which is exactly why the review was worth running.**
 
 ---
 
@@ -144,25 +169,60 @@ over a parameter grid, integrated-physics verification, and a `CANCELLING` case.
 
 ## Next command
 
-1. **Protocol review of `coordination/requester.py` line 417** (finding 27), the only
-   un-reviewed change made outside the integration owner's own files.
-2. **Feed the scenario task feed into `LocalAuction`.** `dynamic-arrivals` and
-   `infeasible-layout` still report "no task is currently assigned to this robot";
-   both need real awards, and `infeasible-layout` then needs the evidence-backed
-   `expected_safe_stop` classification that Gate B requires.
-3. **Throughput.** Two of three tasks in `three-way-junction` are unfinished at 250 s.
-   `amr-03` spends ~3700 ticks under `obstacle_in_path` while creeping out of the
-   junction under the clearance governor. Either the governor is too timid or the
-   junction is too tight for a 0.32 m turning radius — measure before changing
-   either, and do not enlarge the deadline to hide it.
-4. **N5: make the harness publish `peer_state` and `peer_intent`.** Until then
-   `may_enter` never suspends in deterministic mode and every harness test asserts a
-   weaker property than process mode gives. The three-real-process test does exercise
-   the real path.
-5. `asymmetric-partition` does not yet inject a partition into transport.
-6. The harness quantises `max_sim_time_s` to whole seconds, so a 0.05 s budget runs a
-   full second. This is why no short scenario probe works.
+### Done on 2026-10-03 (commit `eee4502`)
 
-Milestones C through G are untouched: no API server, no replay reducer, no
-evaluation module, no benchmark suites, no ROS 2, no Docker. The 20 % makespan
-target remains **unmeasured**.
+1. **Protocol review of `coordination/requester.py` finding 27.** Completed. The
+   change was **dead code** and is reverted; five real blocking defects the review
+   found alongside it are fixed. See the Gate 1 section of `docs/STATUS.md`.
+2. **Feed the scenario task feed into `LocalAuction`.** Completed for
+   `dynamic-arrivals`. Round identity is a pure function of the clock; every member
+   reports on every released task; an award is announced only once every member has
+   reported.
+3. **N5: the harness now publishes `peer_state` and `peer_intent`.** Closed.
+   `may_enter`'s suspend guard is exercised, and a cached `FRESH` verdict expires
+   with no new incoming message.
+4. **`asymmetric-partition` now injects a real partition** into harness routing,
+   through the same `FaultLayer` the process transport uses.
+5. **The harness no longer quantises `max_sim_time_s`.** Discrete fixed-step
+   semantics, declared and tested at the boundaries.
+
+### Still to do
+
+1. **Throughput, root cause first.** Two of `three-way-junction`'s three tasks and
+   most of `dynamic-arrivals`' four do not finish inside their budgets. Measured
+   causes so far: a mutual standoff in a 1.4 m aisle with no passing place
+   (`amr-01`/`amr-02` head-on in the bottom row), and long stretches stopped under
+   `obstacle_in_path`. **Whether the clearance governor is too timid or the geometry
+   is genuinely too tight is still a hypothesis.** Measure before changing either,
+   and do not enlarge a deadline to hide it.
+2. **`infeasible-layout` must reach `expected_safe_stop`** with evidence, not merely
+   with its clock expired. The planner loop that made it unrunnable (an exhaustive
+   A* re-run every physics tick) is not yet fixed — see the next section.
+3. **Measure `asymmetric-partition`'s actual behaviour** under its declared cut, not
+   just that the event fired.
+4. **Milestones C–G, all untouched:** no API server, no replay reducer, no
+   `evaluation/**`, no `scenarios/suites/{smoke,main}.json`, no CLI
+   `run`/`benchmark`/`serve`/`agent`/`replay`, no cockpit integration against a real
+   backend, no Docker/ROS 2/edge profiles. **The 20 % makespan target remains
+   unmeasured.**
+
+### Known performance defect, not yet fixed
+
+`infeasible-layout` re-runs a full A* search **every physics tick** once its goal is
+unreachable. Measured: a single unreachable plan costs **7.07 s** and expands
+119 136 cells; the inner loop repeats it at 20 Hz for every robot with no task. A
+30 s budget does not finish in 300 s of wall clock.
+
+The cause is in `RobotAgent._decide`: the unreachable verdict is returned *before*
+`self._goal` is set, so `self._goal != goal` stays true and the plan is retried on
+every tick. The fix is to latch the verdict with a declared invalidation condition
+(new goal, custody change, map version change) — **not** to reduce the planner's
+expansion budget, which would weaken the planner to hide the cost.
+
+---
+
+## Ownership
+
+`src/niharamesh/coordination/**` and `src/niharamesh/transport/**` are reviewed
+packages: one implementer, one independent reviewer, never the same agent. Changes to
+them are fixed here from a review finding and re-reviewed on the next pass.

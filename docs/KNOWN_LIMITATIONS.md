@@ -26,7 +26,7 @@ and the next experiment — not worked around by changing the baseline.
 
 ---
 
-## 2. Zero observed collisions is not collision freedom
+## 2. Collision counts: a real collision was found, and a zero is still not a proof
 
 **Not true:** that the system is collision-free.
 
@@ -35,6 +35,16 @@ two different algorithms (`swept_body_overlap` and `oracle_overlap`), and the wo
 genuinely applies colliding commands rather than suppressing them. A run reporting
 zero collisions is therefore evidence that no collision was *observed* under that
 run's geometry, sensing and timing — not a universal guarantee.
+
+**A non-zero count is a real finding, and one was found.** On 2026-10-03,
+`dynamic-arrivals` produced **556 overlapping physics samples** between `amr-01` and
+`amr-02` from 62.2 s, on the authored map with no fault injected and nothing edited.
+Root cause: the safety gate had no inter-robot check — a peer reached it only as one
+forward-cone distance compared against a *longitudinal* braking budget, which is the
+wrong quantity for a robot beside the nose. The gate now refuses closing motion
+within a declared separation of a sensed peer, and the overlap no longer occurs in
+that run. The regression is `tests/integration/test_inter_robot_separation.py`, which
+skips when the collision no longer reproduces.
 
 `RunResult` carries `collisions` alongside `min_clearance_m`, and the metric
 registry marks collision counts `zero_is_proof = False`.
@@ -180,60 +190,84 @@ flag is set.
 
 ---
 
-## 12. The three-process network test is intermittently red, and its root cause is not known
+## 12. The three-process network test WAS intermittently red — root cause found 2026-10-03
 
-**Not true:** that `tests/network/test_three_process_peers.py` passes reliably.
+**Resolved, and the cause was never in the transport.**
 
-Measured in this checkout, 2026-10-02:
+Measured in this checkout on 2026-10-02, the flake was: within the full Python
+suite, 1 failure in 3 runs, on the assertion that a cut robot's link to the
+*survivor* reports `status == "healthy"`. An attempted fix had already been reverted
+and recorded.
 
-- `test_three_process_peers_talk_directly` in isolation: **22 consecutive passes, 0
-  failures** (10 whole-file runs plus 14 single-test runs).
-- Within the **full** Python suite: **1 failure in 3 runs**, on the assertion that a
-  cut robot's link to the *survivor* reports `status == "healthy"`.
+**Root cause, found 2026-10-03.** Each of the three child processes samples
+`transport.health()` itself and then immediately calls `transport.stop()`, which
+closes every peer socket. The children are not phase-synchronised — each starts its
+own clock after its own import and polls for the phase command every 20 ms — so when
+the natural skew exceeds a child's shutdown time, a still-running child *truthfully*
+reports a departed peer as `disconnected` / `availability: "unavailable"`. The test
+asserted `healthy` at an instant at which the peer had legitimately gone.
 
-The observed value at failure:
+Reproduced at **5 failures in 45 runs** under CPU load (14 busy-loop processes on 12
+cores), and **in isolation on the very first uninstrumented run**. The departed
+peer's own stack is `PeerTransportServer.stop -> PeerClient.stop -> _detach ->
+StreamWriter.close`, and `connect_attempts` of 1 versus 2 is the reconnect backoff
+clock (≤ 57.5 ms after a successful attach), not a stuck loop.
 
-```text
-{'availability': 'unavailable', 'connect_attempts': 1, 'connected': False,
- 'dialed_from_port': 0, 'status': 'disconnected'}
-```
+**Fix:** a shutdown barrier — no robot calls `transport.stop()` until the parent
+holds all three phase-2 snapshots — plus
+`test_a_robot_that_finishes_early_is_still_healthy_in_its_peers`, which injects the
+phase skew deterministically and failed 6 of 6 times without the barrier. Post-fix:
+40/40 under 14 burners, 20/20 under 10 burners with the artifact ordering invariant
+checked on every run, and 0 `tests/network` failures across 5 full-suite runs.
+A finite clean sample is evidence, not a guarantee of zero future flakes.
 
-`connect_attempts: 1` with `connected: False` means the outbound link had completed
-its **first and only** dial attempt. `PeerLink.run` retries with capped backoff, so a
-single attempt implies the reconnect loop had not re-entered when the sample was
-taken — either the socket was still attached while the health model judged the link
-unavailable, or the loop was inside `_read_loop` and therefore not reconnecting.
+**Two genuine transport defects were found on the way and are fixed.**
+`PeerTransportServer._spawn` registered `self._tasks.discard` as its done callback,
+so a worker killed by an unhandled exception left no counter, no health field and no
+log. And `last_rx_ns` / `last_tx_ns` used `0` as the "no evidence" sentinel, which
+is a legal measurement because `time.monotonic()` resolves to a millisecond on
+Windows; they now report `None`.
 
-**An attempted fix was reverted, and the reason is recorded because getting it wrong
-is the interesting part.** The test's own comment claims it waits on an observable
-"cut is live" condition before sampling; the code does not, it sleeps `_PHASE_S`.
-Adding that wait made the failure *consistent* (8 of 10 runs) instead of intermittent
-and moved it to a different robot. The original was a load-dependent race; the wait
-changed the sampling instant to a point where the link is genuinely still settling,
-and this checkout contains no evidence about which of those states is correct.
-Guessing would have produced a test that passes for the wrong reason, so the change
-was reverted and the flake is recorded here instead.
-
-**What would change this:** reading how `health.peers[*].status` and `availability`
-are derived in `transport/peer.py` and `transport/faults.py`, and establishing
-whether link availability is meant to survive a partition that silences only *other*
-peers. Until then this test's result is reported as observed, not smoothed over.
+**Still open in that test:** its no-leak counters are incremented at the consumer
+(`drain()` popping the inbox) rather than at admission, so `drain()` lag is
+indistinguishable from a partition leak. The partition itself is sound — the
+lag-free evidence is the transport's own inbound drop counter. Not fixed here.
 
 ---
 
-## 13. No scenario completes a task
+## 13. No authored scenario has yet reached `success`
 
-**Not true:** that any authored scenario currently delivers a payload.
+**Superseded as written on 2026-10-03; the honest replacement is worse, not
+better.**
 
-Measured 2026-10-02 at a 150 s budget across all seven library scenarios: every one
-returns `incomplete`. `three-way-junction` showed amr-02 holding `zn-junction` and
-amr-03 correctly starving behind it, because no robot declared zone entry or release
-and no task was bound through the auction. Station service, custody and completion
-credit were unwired at the time of that measurement.
+The original claim was "no scenario delivers a payload". That is no longer true:
+`three-way-junction` completes `t-junction-0` with exactly one completion credit,
+and `dynamic-arrivals` completes `t-dyn-2`. Those are real deliveries, derived from
+real custody events.
 
-This is Milestone B work in progress, recorded so no earlier status line is read as a
-claim of end-to-end capability. A stationary fleet is not a demonstration of
-collision avoidance, and a run that reports `incomplete` is the correct report for it.
+What is still true, and is the current limitation:
+
+**Not one of the seven authored scenarios classifies as `success` at its own
+declared budget.** Every one returns `incomplete`, or — for the partition and
+infeasible layouts — returns something that is not yet the diagnostic outcome the
+scenario intends. `infeasible-layout` is still not `expected_safe_stop`.
+
+Three causes are known and none is diagnosed to root cause yet:
+
+1. **Throughput.** Two of `three-way-junction`'s three tasks, and most of
+   `dynamic-arrivals`' four, do not finish inside their budgets. Measured causes:
+   a mutual standoff in a 1.4 m aisle with no passing place, and `amr-01` spending
+   long stretches stopped under `obstacle_in_path`. Whether the clearance governor
+   is too timid or the geometry is genuinely too tight is **still a hypothesis**.
+2. **`infeasible-layout` never reaches its diagnostic state.** The run now
+   terminates correctly, but the classification and the evidence behind it are not
+   yet in place.
+3. **Partition behaviour is injected but not yet measured.** `asymmetric-partition`'s
+   declared cut is now applied to harness routing; what the fleet *does* under it is
+   not yet established.
+
+Nothing here is worked around. No deadline was enlarged, no map edited, no task
+discarded, and no collision check weakened to produce these numbers.
 
 ## 14. Honest reporting rules this project holds itself to
 

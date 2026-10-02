@@ -1,10 +1,17 @@
 # STATUS
 
-Updated: 2026-10-02 · Branch `feat/niharamesh-platform`
+Updated: 2026-10-03 · Branch `feat/niharamesh-platform` · HEAD `eee4502`
 
 **VERIFIED** = code exists, the named check was executed, output recorded.
 **IMPLEMENTED** = code exists, not yet verified end to end.
 **NOT STARTED** · **BLOCKED** · **EXTERNAL LIMIT** = needs unavailable hardware/software.
+
+> **Read this first.** Milestones A and B are done and independently reviewed.
+> The three gates that followed them — protocol review, the network flake, and
+> Gate B on the authored scenarios — were worked on 2026-10-03. **Milestones C–G
+> are still untouched**: no API server, no replay reducer, no evaluation module,
+> no benchmark suites, no ROS 2, no Docker. **No authored scenario has yet
+> reached `success`,** and the ≥20 % makespan target remains **unmeasured**.
 
 ## Milestone A — simulated motion and the safety boundary
 
@@ -115,19 +122,111 @@ and a genuine command was permitted that carried the chassis **44 mm into a shel
   hardware drive train.
 
 One coordination/requester.py change was made outside the integration owner's
-files and is **awaiting independent protocol review**. It is named in docs/CONTINUE.md
-as the first review item.
+files. **It has now been independently reviewed — and it turned out to be dead
+code.** See the three gates section below.
+
+## The three gates, 2026-10-03
+
+### Gate 1 — independent protocol review: **5 blocking findings, all dispositioned**
+
+The single change Milestone B left un-reviewed turned out to be **dead code**. The
+reviewer fuzzed the real classes and showed `REJECTED` is unreachable while a promise
+is still outstanding, so the added branch could only ever iterate an empty set. It
+fixed nothing, and `docs/CONTINUE.md` finding 27 recorded a defect that does not
+exist. The branch is reverted and finding 27 is corrected.
+
+Four real defects were found alongside it and fixed:
+
+| Finding | Defect | Disposition |
+|---|---|---|
+| B2 | a late-grant cancellation set `durably_non_executable` without checking its journal write, and the journal's exception escaped `ingest` | **Fixed.** Same checked write as `cancel()`; on failure nothing is emitted |
+| B3 | `cancel_timeout_ns` was plumbed in and never read, so one lost `zone_cancel` wedged the zone for that requester permanently | **Fixed.** Reconciliation retransmits, and completes on *acknowledgement* not on *having been told* |
+| B4 | a refused entry declaration let the body keep driving into a position no peer could account for | **Fixed.** The motion decision is frozen with a stated reason |
+| B5 | a *duplicate* grant revoked live authority, contradicting the rule `cancel()` already enforced | **Fixed.** A grant in an authority phase is a duplicate, logged and ignored |
+| B4b | an occupancy declaration arriving at a voter with no record was discarded, leaving that zone `FREE` while a body was inside | **Fixed.** Adopted as `OCCUPIED`, with a tombstone so a replay of a *finished* grant still cannot re-occupy a released aisle |
+
+The adoption is guarded by invariant 6 — it refuses rather than leave one voter
+owing the same requester two grants, a case the property suite found. **Both
+violations cannot be avoided at once**, and the trade is stated in the code rather
+than left implicit.
+
+### Gate 2 — the network flake: **root cause found, and it was not the transport**
+
+Reproduced at **5 failures in 45 runs** under CPU load, and in isolation. Each
+three-process child samples `transport.health()` itself and then immediately stops,
+closing every peer socket; the children are not phase-synchronised, so a robot that
+finished first was *truthfully* reported `disconnected` by a peer that sampled after
+it left. The departed peer's own stack is `PeerTransportServer.stop -> PeerClient.stop
+-> _detach -> close`, and `connect_attempts` of 1 versus 2 is the reconnect backoff
+clock, not a stuck loop.
+
+Fixed with a shutdown barrier, plus a deterministic regression that **fails 6 of 6
+times without it**. Two genuine transport defects were found on the way and fixed:
+`_spawn` swallowed worker deaths entirely, and `0` was used as a "no evidence"
+sentinel for `last_rx`/`last_tx` — a legal measurement, because `time.monotonic()`
+resolves to a millisecond on Windows.
+
+### Gate 3 — Gate B on the authored scenarios: **partially closed**
+
+| Was | Now |
+|---|---|
+| `dynamic-arrivals` reported "no task is currently assigned to this robot" for its whole run | The scenario's declared feed drives the real `LocalAuction`; robots are awarded distinct tasks through computed awards |
+| No `peer_state` was published, so `may_enter`'s suspend guard never fired in any harness run | Agents publish their own estimate and intent on the declared cadence; a cached `FRESH` verdict expires with no new message |
+| `max_sim_time_s` was quantised to whole seconds — a 0.05 s budget ran a full second | Discrete fixed-step semantics, declared and tested at the boundaries |
+
+Wiring the task feed immediately exposed a defect the existing suite could not see:
+**three robots ended up on one payload after one completion credit**, because bid
+costs move as robots drive and the auction has deliberately no shared register. A
+robot that already holds work now withdraws it explicitly and stops competing, and a
+peer's declared withdrawal is authoritative over this robot's own stale
+recomputation.
+
+### A safety defect found while reproducing the scenarios
+
+`dynamic-arrivals` produced **556 overlapping physics samples** between `amr-01` and
+`amr-02` from 62.2 s, on the authored map with no fault injected and nothing edited.
+That is a collision — the inverse of the usual "zero count is not proof" caveat.
+
+Root cause: **the safety gate had no inter-robot check.** A peer reached it only as
+a single forward-cone distance compared against a *longitudinal braking budget* —
+the right question for a shelf ahead, the wrong one for a robot beside the nose. A
+peer 0.5 m off to the side at 90 degrees is inside the cone and outside the budget,
+so the gate permitted motion straight into it.
+
+The gate now refuses closing motion within a declared separation of a **sensed**
+peer. Sensed, radial and closing — so a robot already stopped beside a peer does not
+freeze, which was the over-refusal that froze two of three robots in Milestone A.
+Measured after the fix: no overlap in the same run.
+
+## Checks executed in this checkout after the three gates
+
+```powershell
+.\.venv\Scripts\python.exe -m pytest -q -p no:cacheprovider --timeout=900
+# 570 passed, 1 skipped in 341.50s; exit 0
+.\.venv\Scripts\python.exe -m ruff check src tests scripts --no-cache
+# All checks passed!
+.\.venv\Scripts\python.exe -m mypy --cache-dir var/mypy-next
+# Success: no issues found in 71 source files
+.\.venv\Scripts\python.exe -m pytest -q -p no:cacheprovider tests/network
+# 6 passed in 9.67s; exit 0
+```
+
+The one skip is `test_two_robots_never_occupy_the_same_space`, which skips when the
+collision it documents **no longer reproduces**. That is the intended state after the
+fix; the defect and its measurement are preserved in the file's docstring.
+
+**Frontend checks were not rerun** in this session — no frontend file changed, and
+the previous `tsc`/`vitest`/`build` results are retained below as prior evidence,
+not as checks executed now.
 
 ### Still open
 
-- dynamic-arrivals and infeasible-layout have no task bound through the auction.
-- The harness publishes no peer_state, so may_enter never suspends in
-  deterministic mode and every harness test asserts a weaker property than process
-  mode gives.
-- The three-process network test is intermittently red under full-suite load;
-  measured and recorded in docs/KNOWN_LIMITATIONS.md item 12 rather than smoothed
-  over.
-- Milestones C-G are untouched: no API server, no replay reducer, no evaluation
+- **No authored scenario has reached `success`.** The task feed, publication and
+  deadline work unblocked allocation; throughput has not yet been diagnosed or tuned.
+- **`infeasible-layout` still does not reach `expected_safe_stop`.**
+- `asymmetric-partition` records a `fault_injected` event; the declared partition is
+  now applied to harness routing, but its *intended behaviour* is not yet measured.
+- Milestones C–G are untouched: no API server, no replay reducer, no evaluation
   module, no benchmark suites, no ROS 2, no Docker.
 - **The 20 % makespan target remains unmeasured.** No paired experiment has been run.
 

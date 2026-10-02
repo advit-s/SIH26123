@@ -28,6 +28,22 @@
       "title": "FaultKind",
       "type": "string"
     },
+    "FaultParam": {
+      "anyOf": [
+        {
+          "type": "number"
+        },
+        {
+          "type": "integer"
+        },
+        {
+          "type": "boolean"
+        },
+        {
+          "type": "string"
+        }
+      ]
+    },
     "FaultTarget": {
       "additionalProperties": false,
       "description": "Explicit sender/receiver targeting. A fault with no target is invalid -\nthe brief requires directed fault injection, not a global toggle.",
@@ -163,7 +179,7 @@
     },
     "params": {
       "additionalProperties": {
-        "type": "number"
+        "$ref": "#/$defs/FaultParam"
       },
       "title": "Params",
       "type": "object"

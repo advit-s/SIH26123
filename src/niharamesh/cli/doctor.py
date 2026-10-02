@@ -94,11 +94,16 @@ def _port_free(host: str, port: int) -> bool:
 
 
 def _git(*args: str) -> str | None:
-    if shutil.which("git") is None:
+    # Resolve the absolute path first. `shutil.which` guards against PATH lookup
+    # surprises; passing the resolved path also satisfies the linter's rule about
+    # partial executable paths, which is the same safety property in a form a
+    # machine can check.
+    executable = shutil.which("git")
+    if executable is None:
         return None
     try:
-        out = subprocess.run(  # noqa: S603, S607 - git already resolved via shutil.which
-            ["git", *args], capture_output=True, text=True, timeout=15, check=False
+        out = subprocess.run(  # noqa: S603
+            [executable, *args], capture_output=True, text=True, timeout=15, check=False
         )
     except (OSError, subprocess.SubprocessError):
         return None

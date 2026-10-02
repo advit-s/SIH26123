@@ -183,6 +183,22 @@
       "title": "FaultKind",
       "type": "string"
     },
+    "FaultParam": {
+      "anyOf": [
+        {
+          "type": "number"
+        },
+        {
+          "type": "integer"
+        },
+        {
+          "type": "boolean"
+        },
+        {
+          "type": "string"
+        }
+      ]
+    },
     "FaultSpec": {
       "additionalProperties": false,
       "properties": {
@@ -207,7 +223,7 @@
         },
         "params": {
           "additionalProperties": {
-            "type": "number"
+            "$ref": "#/$defs/FaultParam"
           },
           "title": "Params",
           "type": "object"

@@ -1,246 +1,200 @@
-# Continuation state
+# CONTINUE
 
-Dated: 2026-10-02 · Branch `feat/niharamesh-platform`
+## Where this is right now
 
-This file answers "where was I, what is the exact next command, and what is still
-broken" for a fresh context. It is updated at every milestone and is **not** a plan
-— read `docs/STATUS.md` for what is verified and `docs/KNOWN_LIMITATIONS.md` for
-what is honestly unproven.
+`feat/niharamesh-platform`, head `b492bfd` "Repair the simulated-motion and safety
+boundary (Milestone A)". Working tree clean apart from two deliberately
+untracked files: `NiharaMesh_OpenCode_Master_Build_Prompt.md` and
+`docs/superpowers/plans/2026-10-02-opencode-continuation-prompt.md`.
 
----
+**Milestone A is done and committed.** Eleven defects, listed with root causes in
+`docs/STATUS.md` and in the commit message itself. The approved contract is
+`docs/superpowers/plans/milestone-a-contract.md`.
 
-## Where the build stands
+Verified in this checkout at `b492bfd`:
 
-Core workstreams and cockpit have landed. Git currently has 12 commits, ending
-at `505629a`. End-to-end task completion, API, replay and benchmarks are still
-incomplete. Use `docs/STATUS.md` for the distinction between prior workstream
-reports and checks executed during the latest relay repair.
-
-### Latest local changes (not committed)
-
-- Added `_drain_outboxes` to `src/niharamesh/runs/harness.py`, called before inbox
-  delivery every physics tick. It drains **`agent.coordinator.outbox`**; there is
-  no `requester.outbox`. Do not follow the previous handoff's wrong-queue advice.
-- Added `tests/integration/test_harness_relay.py`: real three-agent grant
-  acquisition, durable cancellation and peer acknowledgements. Both tests failed
-  before the repair and pass afterwards. Independent read-only review passed.
-- Narrowed `.gitignore` from `runs/` to `/runs/`. The old pattern accidentally hid
-  both existing `src/niharamesh/runs/*.py` files from Git, despite the earlier
-  commit title claiming a harness. They are now visible as untracked source;
-  include both in a future integration commit. Leave the original build prompt
-  uncommitted as requested.
-- Updated this file and `docs/STATUS.md` with actual scenario outcomes and the
-  additional runtime blockers.
-
-### Ownership rule
-
-No implementation subagent is currently in flight from this repair. One subagent
-performed read-only protocol and diff review; the integration owner made all edits.
-Before any new delegation, assign non-overlapping file ownership.
-**Do not edit files while their owning subagent is running.** Earlier concurrent
-edits to `safety/collision.py` lost work. Only the integration owner stages or commits.
-
-### Exact next engineering step
-
-Start with regression tests for the simulated-actuation and agent/gate boundary.
-All three 60-second checks (`three-way-junction`, `headon-aisle`,
-`infeasible-layout`) still ended `incomplete`, with zero task completions and
-every command vetoed as `actuator_fault`. The junction requester now holds all
-three grants, so the transport blockage is resolved.
-
-`World` copies `physical_actuation_enabled=False` into observations and rejects
-commands. Separate simulated motion from physical actuation deliberately; do not
-enable hardware globally to obtain a green demo. Then test and fix the ignored
-agent decision, incorrect zone context, missing protocol safety callback and
-veto timestamp accounting before wiring service, custody, entry and safe release.
-The full list and code boundaries are in `docs/STATUS.md`.
-
-Runtime grant exchange now works; successful task completion and the diagnostic
-safe-stop outcome have **not** been observed. The 20% target remains unmeasured.
-
-### Integration owner's remaining work
-
-1. `src/niharamesh/agent/**` — finish runtime integration after the safety-boundary
-   regression tests above. Core subsystems have landed; their integration is incomplete.
-2. `src/niharamesh/api/**` — FastAPI app, WebSocket stream, command plane.
-   Partially specified; the frontend is coding against the agreed contract.
-3. `src/niharamesh/evaluation/**` — metrics, eligibility, gaps, paired analysis.
-4. `src/niharamesh/replay/**` — reducer, version handling.
-5. `src/niharamesh/cli/{run,agent,serve,bench,replay}.py` — the remaining CLI
-   commands. `doctor` and `scenarios` already work; the others register only once
-   their runtime module exists, and `nihara --help` says which are absent.
-6. `scenarios/suites/{smoke,main}.json` — benchmark suite definitions.
-7. `deployment/`, `ros2/`, `.github/workflows/`.
-8. Remaining docs: `ARCHITECTURE.md`, `GLOSSARY.md`, `BENCHMARKS.md`,
-   `SCENARIOS.md`, `FAULTS.md`, `REPLAY.md`, `API.md`, `EDGE.md`, `SECURITY.md`,
-   `SKILLS.md`, `DEMO.md`, `THIRD_PARTY.md`, `DECISIONS.md`.
-
----
-
-## Exact commands
-
-```bash
-# environment (verified 2026-10-02)
-uv sync --extra dev            # Python env, Python 3.12.14
-pnpm install                   # JS workspace
-pnpm --filter @niharamesh/contracts generate
-
-# quality gates
-uv run ruff check src tests scripts
-uv run mypy
-pnpm --filter @niharamesh/web exec tsc --noEmit
-
-# tests
-.\.venv\Scripts\python.exe -m pytest tests/integration/test_harness_relay.py -q -p no:cacheprovider
-# Latest focused check: 2 passed. Full Python suite: 426 passed.
-# Existing venv bypasses sandbox-denied uv cache; cacheprovider also disabled.
-uv run pytest tests/unit -q
-uv run pytest tests/protocol -q
-uv run pytest tests/property -q
-uv run pytest tests/integration -q
-uv run pytest tests/network -q
-pnpm test:e2e
-
-# scenarios
-uv run nihara scenarios export
-uv run nihara scenarios validate --structural-only
-uv run nihara doctor
-
-# Future run + evidence commands (CLI runtime is not implemented yet)
-uv run nihara run --scenario scenarios/three-way-junction.r1.json --mode deterministic
-uv run nihara benchmark --suite scenarios/suites/smoke.json --output var/benchmarks/smoke
+```powershell
+.\.venv\Scripts\python.exe -m pytest -q -p no:cacheprovider    # 512 passed, exit 0
+.\.venv\Scripts\python.exe -m ruff check src tests scripts --no-cache   # clean
+.\.venv\Scripts\python.exe -m mypy --cache-dir var/mypy-milestone-a     # 71 modules, clean
+pnpm --filter @niharamesh/web exec tsc --noEmit              # exit 0
+pnpm --filter @niharamesh/web test                           # 63 passed
+pnpm --filter @niharamesh/web build                          # succeeded
 ```
 
-Intended full release path: `pnpm verify`; this repair did not establish release readiness.
-Generated 60-second scenario artifacts, including snapshots and manifests:
-`var/verification/harness-relay/{scenario-id}.json`.
+If any of those disagree with reality, believe the command, not this file.
 
 ---
 
-## Environment (recorded, do not re-derive)
+## Finding 14 — every tick was vetoed as `actuator_fault`
 
-| Component | Version |
-|---|---|
-| OS | Windows 11 win32, PowerShell 5.1 |
-| Git | 2.53.0.windows.2, identity present |
-| Node.js | v24.13.0 |
-| pnpm | 11.22.0 |
-| uv | 0.12.7 |
-| CPython (uv-managed) | 3.12.14 |
-| OpenCode | **2.0.22 — v2 schema** (`agents`, `permissions`, `mode: subagent`) |
-| Docker | **absent** |
-| Skills discovery | `.agents/skills/` (project compatibility path) and `.opencode/skills/` |
+**Symptom.** All three named scenarios ran to their deadline with zero completed
+tasks and 1200/1200 vetoed ticks each:
 
----
+```text
+three-way-junction -> incomplete duration 60.0
+   amr-01 cmds 1200 vetoes 1200 stops {'actuator_fault': 1200}
+```
 
-## Unresolved failures and decisions taken during debugging
+**Root cause.** `SimulationConfig.physical_actuation_enabled` answered two
+different questions at once. `World.apply_command` read it as "is the actuator
+chain live", refused every command in the default configuration, and
+`Observation.motion.actuation_enabled` therefore reported a dead chain, which the
+safety gate's very first check turned into `ACTUATOR_FAULT`. Nothing could start.
 
-These are recorded so the next context does not re-derive them.
-
-### 1. Kinematics: rectangle-rule under-travel during braking (FIXED)
-
-`step()` advanced position by `next_v * dt` while `distance_m` reported the
-trapezoid `0.5*(v+next_v)*dt`. Over a full stop that made the robot travel ~10 %
-less than the analytic `v²/(2a)` — enough to fail any comparison against the
-stopping-distance argument the safety gate relies on. **Fix:** integrate position
-with the same trapezoid, so reported and travelled distances agree. Now
-0.100000 m measured vs 0.100000 m analytic.
-
-### 2. Kinematics: test harness reset momentum every step (FIXED)
-
-`tests/unit/test_kinematics.py::_run` fed back `x, y, theta` but not `v, omega`,
-so velocity never accumulated and every multi-step test was meaningless. The
-assertion "velocity reaches the max" failed at 0.025 m/s for exactly this reason.
-
-### 3. Kinematics test asserted degrees where the API is rad/s (FIXED)
-
-`test_pivot_turn_keeps_the_position_fixed` compared against
-`math.radians(0.8) * 20 * dt` — treating a rad/s command as degrees. Replaced with
-the integral of the recorded rate plus a no-ramp upper bound, which also accounts
-for the angular acceleration ramp.
-
-### 4. Collision: residual inflation created false positives (FIXED)
-
-`swept_body_overlap` substepped by translation fraction and, on exceeding
-`max_substeps`, inflated both bodies by half the residual bound. That is
-conservative in the safety direction but **manufactures penetration out of real
-clearance** — it disagreed with the independent oracle on 3 of 300 randomised
-cases and on the thin-body adversarial set, all in the false-positive direction.
-
-Root cause: translation never needed substepping at all. The Minkowski sum of a
-convex body with a translation segment *is* the convex hull of its endpoint
-corners, so one separating-axis test decides translation **exactly**.
-
-**Fix:** substeps are rotation-driven only; each substep tests
-`_swept_translation_hits` (exact hull) plus the substep midpoint inflated by the
-exact arc sagitta `r(1 − cos(φ/2))`. Exceeding `max_substeps` now **raises**
-instead of silently coarsening. `MAX_RUNTIME_SUBSTEPS` raised 64 → 128 so the
-documented worst case (a quarter turn) resolves at full resolution.
-
-### 5. Collision: touching exactly was reported as clear (FIXED)
-
-`sat_overlap` requires strictly positive penetration, so two 1 m boxes at exactly
-1 m apart — sharing a face — were reported as clear by the runtime path while the
-oracle called it a collision. Added `_runtime_hits_box`, which consults the
-closed-set `_runtime_touching` as well. Zero clearance is not safe clearance in
-this system.
-
-### 6. Oracle agreement tests asserted a property the new algorithm invalidates (REWRITTEN)
-
-Two tests asserted "the oracle's residual is strictly below the runtime's" and
-"the oracle samples ≥5× finer". Both encoded the *old* design assumption that the
-runtime checker was the coarser of the two. With translation exact, the runtime
-residual is *smaller* — which is the desired outcome. Replaced with tests that
-assert what actually matters now:
-- the runtime residual is **independent of travel** (translation contributes zero),
-- the runtime residual is **bounded by the documented sagitta**,
-- the oracle's residual stays **positive**, so it can still falsify the runtime.
-
-### 7. Scenario zone/berth geometry was wrong (FIXED by the validator)
-
-The first authored zones placed queue berths on the aisle centre line at a
-cross-aisle `y`, which fell **inside** the zone's inflated protected area — a
-berth inside a zone means a robot stopping there still holds another robot's
-resource. `validate_berth_separation` caught it. Fixed by offsetting interior-aisle
-berths ±1.5 m laterally into the cross aisle, and by re-authoring zones per shelf
-row (`row_zone`) so consecutive zones along an aisle are always separated by a
-whole cross aisle — which is what makes "one outstanding grant per robot"
-practical without deadlock.
-
-### 8. Scenario path resolution double-joined (FIXED)
-
-`resolve_scenario_path(base, "scenarios/x.json")` produced `scenarios/scenarios/…`.
-Now tries CWD-relative and root-relative, accepting whichever lands inside the root,
-and still refuses any escape.
+**Lesson worth keeping.** The previous advice to drain `requester.outbox` was
+wrong for this checkout, and the relay was *not* the blocker. One flag silently
+answering two questions was. The failing signal was uniform and specific
+(`actuation_disabled` on every tick), which is what should have been read as a
+configuration mistake rather than a coordination one.
 
 ---
 
-## Invariants that must survive integration
+## Finding 15 — an authority bypass through a zone on the plan
 
-1. Simulator never plans/awards/grants; API never coordinates; browser never
-   advances truth.
-2. No agent function returns another agent's truth or the evaluator's verdict.
-3. Occupancy is never cleared by a timer; there is no force-release.
-4. Cancellation is durable at the owner before peer reconciliation.
-5. One outstanding grant per robot; canonical order includes the requester's own
-   voter.
-6. Every actuator command passes the safety gate.
-7. Clock domains never mix.
-8. Scenario snapshot immutable per run.
-9. Missing metric = `unavailable`, never `0`.
-10. Failure states are visible, never green.
+**Symptom.** `_to_command` discarded `_decide`'s `SafetyDecision(False, ...)` and
+called `_pursue` regardless, so a robot queued for a zone it did not hold emitted
+a full-speed pursuit command. The gate did not catch it, because
+`GateContext.inside_zone` was filled from `_zone_in_progress` — the next zone
+*anywhere on the remaining plan* — which satisfied the blanket
+`if inside_zone is None and zone_authority is None: veto` rule from ten metres
+away.
+
+Reproduced directly against the unmodified gate:
+
+```text
+TODAY open-space motion (no authority, sweeping clear of every zone):
+    SafetyDecision(permitted=False, reason=zone_authority_missing, constraint='no_zone_authority')
+TODAY a robot naming a zone ten metres away on its plan:
+    SafetyDecision(permitted=True, reason=none, constraint='')
+```
+
+**Lesson worth keeping.** The two halves were individually defensible and jointly
+a bypass. One field meant "the zone I intend to need", the other asked "do I have
+authority for anything at all". Splitting them into four separately named facts
+(`occupied_zone`, `entry_permission`, `zone_authority`, `swept_body`) removed the
+ambiguity rather than patching either half.
 
 ---
 
-## Honest gaps carried forward
+## Finding 16 — a false measurement that refused honestly
 
-- **20 % target: unmeasured.** Report as achieved or not achieved from a paired run
-  set. Never estimated.
-- Docker, ROS 2 and ARM edge hardware are **unavailable here**; their integration
-  paths are not implemented or executed. Do not repeat earlier claims of authored
-  Compose files or verified ROS adapters without checking the actual files.
-- Protocol interleaving verification is **bounded**, not unbounded.
-- No learned component is shipped; the AI is search + constrained decisions +
-  intent prediction + negotiation, described precisely.
+**Symptom.** `_box_gap` accumulated its per-axis separating-axis projections with
+`min` where the theorem requires `max`. For any body not facing roughly east, one
+axis produced a large negative value, the minimum went negative, and
+`max(0.0, ...)` reported a genuine 0.30 m clearance as `0.0`. The gate then vetoed
+with `obstacle_0.000m<0.320m` and a robot standing in a clear aisle could not
+move at all.
 
-See `docs/KNOWN_LIMITATIONS.md` for the full list.
+**Lesson worth keeping.** The gate errs towards refusing, so this looked like
+conservative behaviour rather than a bug. It is not: it told an operator an
+obstacle existed where none did, and it made the whole laboratory unable to
+demonstrate anything. A wrong measurement is a defect in the safe direction too.
+
+---
+
+## Finding 17 — the lateral shelf, and a robot that could not turn away
+
+**Symptom.** Two of three robots in `headon-aisle` were frozen on
+`obstacle_in_path` for 2900 of 3000 ticks. Two separate causes:
+
+1. The stopping budget is **longitudinal** (`v·t_r + v²/2a + margin`) but was
+   compared against the nearest obstacle in **any** direction. A shelf 0.26 m away
+   *beside* a robot driving parallel to it is not a stopping hazard.
+2. A veto zeroed `angular_radps` as well as `linear_mps`. A robot pointed at a
+   shelf it needed to reverse away from could not translate, could not steer, and
+   therefore stayed pointed at the shelf for the rest of the run.
+
+**Fix.** Exact geometric tests — the body, and the body carried *forward* by its
+own stopping reach and widened by its corner sweep, must not overlap static
+geometry. The pivot is offered to the gate as its own command and gets its own
+decision, and the corner-sweep term is what makes letting it steer safe.
+
+**Lesson worth keeping.** "Refuse" is not "stop". Braking is longitudinal; a
+command with zero requested velocity is not instantaneous rest, and a veto that
+removes the ability to *steer* can be a livelock rather than a brake.
+
+---
+
+## Finding 18 — invariant 6, enforced by the protocol and violated by the caller
+
+**Symptom.** `cycle-with-holding` crashed outright:
+
+```text
+RuntimeError: robot amr-02 already holds an outstanding transaction for
+'zn-cycle-bottom' (granted); invariant 6 permits one outstanding grant globally
+```
+
+**Root cause.** With authority held for one zone and a *different* zone next on
+the plan, `_decide` called `begin_acquire` anyway. The requester was correct to
+raise; the runtime had to respect the rule rather than discover it.
+
+**Lesson worth keeping.** A protocol that raises is doing its job. The caller is
+the defect.
+
+---
+
+## Finding 19 — world-frame bearings read as body-frame (found while fixing 17)
+
+`_forward_clearance_m` filtered `abs(ray.bearing_rad) <= pi/2`, which measures
+the wedge around the world `+x` axis. `RangeRay.bearing_rad` is **world**-frame.
+Any robot not facing east therefore reported *no forward evidence at all* and
+silently fell back on the exact map test alone — which is how the measured half
+of the obstacle check disappeared for two of three robots, without any error.
+
+Introduced by the fix for finding 17 and caught by reading `sensors.py` rather
+than by a test. Worth remembering: a change that makes a safety check *absent*
+produces no symptom of its own.
+
+---
+
+## Two latent test defects found by running the suite
+
+Neither is a product defect; both would have hidden a real one.
+
+- `tests/property/test_allocation_properties.py::test_total_cost_is_monotonic_in_travel_time_s`
+  asserted that quantising two totals can never move their difference by more than
+  `2 x step`. Hypothesis found two counterexamples. The correct bound is
+  `3 x max(step, ulp)`: each total is rounded to a grid of spacing
+  `max(step, ulp)` (rounding 2.1e9 to seven decimals asks for a resolution the
+  double does not have), each rounding contributes up to half of that, and
+  computing the difference contributes one more.
+- `tests/unit/test_world.py` built its config with `physical_actuation_enabled=True`
+  purely so robots would move, which meant it never exercised the shipped default
+  and quietly opted into a hardware boundary. Removed.
+
+---
+
+## Next command
+
+Milestone B — complete task and zone lifecycles. Milestone A made motion honest;
+nothing completes a task yet. In rough dependency order:
+
+1. **`RobotAgent` declares zone entry and release.** Nothing ever enters a zone,
+   so nothing is ever released: in `three-way-junction` amr-02 holds `zn-junction`
+   for the whole run and amr-03 starves behind it for 3000 ticks. Needs
+   `coordinator.mark_entered()` when the robot's own body crosses into the zone it
+   holds, and `coordinator.release()` only when the body has actually cleared —
+   asserted on the robot's own geometry, never on a timer.
+2. **Station service.** `World.begin_service` / `service_complete` exist and are
+   unwired. Neither a timer started far from a station nor proximity alone proves a
+   delivery; the world reports the physical fact and the agent/custody system owns
+   task authority.
+3. **Feed the scenario task feed into `LocalAuction`.** `dynamic-arrivals` has all
+   three robots reporting "no reachable task remains for this robot", and
+   `infeasible-layout` reports the same. Bind claims and capacity to actual awards.
+   No harness-side allocator.
+4. **Custody and exactly-once completion credit.** Derive `tasks_completed` from
+   real task events. Never populate it to satisfy the harness outcome check.
+5. **Honest `_classify`.** Inspect it rather than trusting its name. A known
+   collision must never be reported as success or as an expected safe stop. Gate B
+   requires `three-way-junction` to complete its tasks and `infeasible-layout` to
+   produce an evidence-backed `expected_safe_stop` — without altering maps,
+   deleting tasks, changing expected outcomes or enlarging time budgets.
+6. **Make every advertised fault affect its intended subsystem.** Logging
+   `fault_injected` without applying the fault is not implementation.
+
+Also still open from earlier milestones: the harness quantises `max_sim_time_s` to
+whole seconds (`while clock.now_s() < deadline` over an inner 20-step block), so a
+1-second budget runs a full second and a 0.05-second budget does the same.
+`asymmetric-partition` does not yet inject a partition into transport.

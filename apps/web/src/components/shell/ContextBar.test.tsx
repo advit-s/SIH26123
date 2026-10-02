@@ -77,7 +77,11 @@ describe("ContextBar", () => {
     renderBar()
     // 42.5 sim seconds -> 0:42.5 in the logical domain.
     expect(screen.getByTestId("context-sim-time")).toHaveTextContent("0:42.5")
-    expect(screen.getByText("2026-10-02 09:15:00 UTC")).toBeInTheDocument()
+    // The wall clock is condensed to a time of day in the bar; the full stamp
+    // moves into the cell's title rather than being dropped.
+    const wallCell = screen.getByText("wall · UTC").closest("div")
+    expect(wallCell?.getAttribute("title")).toContain("2026-10-02 09:15:00 UTC")
+    expect(wallCell?.textContent).toContain("09:15:00")
     // Each clock names its own domain. They are never merged.
     expect(screen.getByText("sim s · logical")).toBeInTheDocument()
     expect(screen.getByText("wall · UTC")).toBeInTheDocument()

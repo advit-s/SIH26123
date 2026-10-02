@@ -5,6 +5,7 @@ export type Description = string;
 export type DurationS = number;
 export type ExpectedInvariant = string;
 export type FaultId = string;
+export type FaultParam = number | boolean | string;
 export type SchemaVersion = string;
 export type Seed = number;
 export type StartAtS = number;
@@ -231,7 +232,7 @@ export interface FaultSpec {
   target: FaultTarget;
 }
 export interface Params {
-  [k: string]: number;
+  [k: string]: FaultParam;
 }
 /**
  * Explicit sender/receiver targeting. A fault with no target is invalid -

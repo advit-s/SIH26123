@@ -24,6 +24,11 @@ uv run ruff check src tests scripts   → All checks passed!
 uv run mypy                           → Success: no issues found in 71 source files
 uv run pytest tests/unit tests/protocol tests/property tests/network -q
                                       → 424 passed
+pnpm --filter @niharamesh/web exec tsc --noEmit      -> exit 0 (strict)
+pnpm --filter @niharamesh/web test                   -> 63 passed (7 files)
+pnpm --filter @niharamesh/web build                  -> built in 12.49s
+pnpm test:e2e                                        -> 8 passed, 40 skipped, 0 failed
+uv run nihara scenarios validate --structural-only   -> 6 launchable, 1 diagnostic-only
 ```
 
 ## Phase 0 — Repository and contracts · COMPLETE
@@ -83,8 +88,9 @@ the **20 % reduction is the organiser's own success criterion**, not our claim.
 |---|---|---|
 | **Task completion end to end** | **BLOCKED** | See below |
 | Application API + WebSocket stream | NOT STARTED | Frontend workstream landed a client against a spec; the server is not written |
-| Web cockpit | IMPLEMENTED | `apps/web/` 46+ files, but **unverified** — no server to talk to, browsers not installed here |
-| Playwright e2e | NOT STARTED | |
+| Web cockpit (14 057 lines) | **VERIFIED** | `tsc` strict exit 0; 63 vitest passing; production build 12.49 s |
+| Playwright e2e, real Chromium | **VERIFIED (degradation path)** | `pnpm test:e2e` -> **8 passed, 40 skipped, 0 failed**; every skip names its reason |
+| Playwright e2e against a mock API | VERIFIED (mock) | 50 passed over 2 viewports, run by the workstream against a throwaway mock kept OUTSIDE this repo |
 | Benchmark suites and measured results | NOT STARTED | |
 | Replay reducer | NOT STARTED | |
 | CLI `run` / `benchmark` / `serve` / `agent` / `replay` | NOT STARTED | Commands register only when their runtime exists; `nihara --help` says so |
@@ -147,4 +153,4 @@ in either direction. See `docs/KNOWN_LIMITATIONS.md` §1 and
 - Docker absent → Compose path authored, unexecuted.
 - ROS 2 absent → bridge build unexecuted.
 - No ARM hardware → edge figures are specifications.
-- Browsers not installed here → Playwright unexecuted.
+- Playwright **was** exercised against the real absence of an API: 8 specs assert the honest-failure behaviour and 40 skip with a reason naming the command that starts the API. The 50 passing runs came from a throwaway mock **outside** this repository - evidence about the cockpit, not about the real backend.

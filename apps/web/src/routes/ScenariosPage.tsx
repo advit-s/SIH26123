@@ -27,7 +27,7 @@ import { UNAVAILABLE, titleCase } from "../lib/format"
 import { useViewStore } from "../lib/view/store"
 import { Button } from "../components/primitives/Button"
 import { Chip } from "../components/primitives/Chip"
-import { Field } from "../components/primitives/Field"
+import { ControlField, Field } from "../components/primitives/Field"
 import { HatchStrip, Panel, PanelBody, PanelHeader, Strip } from "../components/primitives/Panel"
 import { DataTable, type Column } from "../components/primitives/DataTable"
 import { EmptyState, ErrorState, LoadingState } from "../components/primitives/States"
@@ -291,29 +291,29 @@ export function ScenariosPage({ initialScenarioId }: { initialScenarioId: string
           />
           <PanelBody>
             <div className="grid gap-3 p-3 min-[980px]:grid-cols-2">
-              <Field label="scenario name">
+              <ControlField label="scenario name">
                 <input
                   value={scenario.name}
                   onChange={(event) => edit((d) => ({ ...d, name: event.target.value }))}
                   className="w-full border border-rule bg-raised px-1.5 py-1 text-[12px] text-ink"
                 />
-              </Field>
-              <Field label="seed">
+              </ControlField>
+              <ControlField label="seed">
                 <input
                   type="number"
                   value={scenario.seed ?? 0}
                   onChange={(event) => edit((d) => ({ ...d, seed: Number(event.target.value) }))}
                   className="num w-full border border-rule bg-raised px-1.5 py-1 text-[12px] text-ink"
                 />
-              </Field>
-              <Field label="experiment goal" className="min-[980px]:col-span-2">
+              </ControlField>
+              <ControlField label="experiment goal" className="min-[980px]:col-span-2">
                 <textarea
                   rows={2}
                   value={scenario.intent.goal}
                   onChange={(event) => edit((d) => ({ ...d, intent: { ...d.intent, goal: event.target.value } }))}
                   className="w-full resize-y border border-rule bg-raised px-1.5 py-1 text-[12px] text-ink"
                 />
-              </Field>
+              </ControlField>
 
               <MapEditor scenario={scenario} edit={edit} gridSnap={gridSnap} />
               <EntityEditor scenario={scenario} edit={edit} gridSnap={gridSnap} />
@@ -504,30 +504,30 @@ function MapEditor({
       <h3 className="stencil text-[10px] text-ink-2">map entities</h3>
 
       <div className="mt-1.5 grid grid-cols-4 gap-1.5">
-        <Field label="min x" mono>
+        <ControlField label="min x">
           <NumInput
             value={map.boundary.min_x}
             onChange={(v) => edit((d) => ({ ...d, map: { ...d.map, boundary: { ...d.map.boundary, min_x: v } } }))}
           />
-        </Field>
-        <Field label="min y" mono>
+        </ControlField>
+        <ControlField label="min y">
           <NumInput
             value={map.boundary.min_y}
             onChange={(v) => edit((d) => ({ ...d, map: { ...d.map, boundary: { ...d.map.boundary, min_y: v } } }))}
           />
-        </Field>
-        <Field label="max x" mono>
+        </ControlField>
+        <ControlField label="max x">
           <NumInput
             value={map.boundary.max_x}
             onChange={(v) => edit((d) => ({ ...d, map: { ...d.map, boundary: { ...d.map.boundary, max_x: v } } }))}
           />
-        </Field>
-        <Field label="max y" mono>
+        </ControlField>
+        <ControlField label="max y">
           <NumInput
             value={map.boundary.max_y}
             onChange={(v) => edit((d) => ({ ...d, map: { ...d.map, boundary: { ...d.map.boundary, max_y: v } } }))}
           />
-        </Field>
+        </ControlField>
       </div>
 
       <p className="stencil mt-2 text-[9px] text-ink-3">obstacles / shelves ({obstacles.length})</p>

@@ -257,6 +257,7 @@ export function OperationsPage({
             robotIds={robotIds}
             poseAges={poseAges}
             freshnessHorizonS={freshnessHorizonS}
+            live={live}
           />
         </div>
         <div className="scroll-y max-h-[46%] shrink-0 space-y-2 border-t border-rule p-2" data-testid="operator-panels">
@@ -304,6 +305,7 @@ function InspectorColumn({
   robotIds,
   poseAges,
   freshnessHorizonS,
+  live,
 }: {
   robots: RobotInspection[]
   zones: ZoneInspection[]
@@ -312,6 +314,7 @@ function InspectorColumn({
   robotIds: string[]
   poseAges: Map<string, number | null>
   freshnessHorizonS: number
+  live: boolean
 }) {
   const selection = useViewStore((s) => s.selection)
   const inspectorTab = useViewStore((s) => s.inspectorTab)
@@ -357,6 +360,7 @@ function InspectorColumn({
               robot={selectedRobot}
               freshnessHorizonS={freshnessHorizonS}
               liveAgeS={poseAges.get(selectedRobot.robot_id) ?? null}
+              streamLive={live}
             />
           )
         ) : inspectorTab === "zone" ? (

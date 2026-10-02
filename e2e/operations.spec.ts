@@ -40,7 +40,7 @@ test.describe("operations cockpit", () => {
 
     // Battery always declares its provenance.
     await expect(inspector.getByText("battery")).toBeVisible()
-    await expect(inspector.getByText(/unavailable|measured|simulated|estimated/)).toBeVisible()
+    await expect(inspector.getByText(/^(unavailable|measured|simulated|estimated)$/).first()).toBeVisible()
   })
 
   test("keeps the selection while data refreshes", async ({ page }) => {

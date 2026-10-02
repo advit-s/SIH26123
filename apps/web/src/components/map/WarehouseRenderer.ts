@@ -414,9 +414,11 @@ export class WarehouseRenderer {
             fontWeight: "500",
           },
         })
-        label.anchor.set(0.5)
-        label.position.set(a.x + w / 2, a.y + h / 2)
-        label.alpha = 0.85
+        label.anchor.set(0, 0)
+        // Top-left of the protected geometry, not the centre: a robot sitting
+        // inside the zone must not sit on top of its own label.
+        label.position.set(a.x + 4, a.y + 2)
+        label.alpha = 0.9
         this.zoneLabelLayer.addChild(label)
       }
 
@@ -471,7 +473,9 @@ export class WarehouseRenderer {
         letterSpacing: 0.6,
       },
     })
-    caption.position.set(10, 10)
+    // Bottom-left, above the scale bar: the top strip is reserved for the
+    // stream-state banner, and two overlapping captions would be unreadable.
+    caption.position.set(10, this.viewport.height - 58)
     this.overlayLayer.addChild(caption)
     this.overlayCaptions.push(caption)
   }
@@ -647,7 +651,7 @@ export class WarehouseRenderer {
         continue
       }
 
-      const centre = toScreen(pose ?? resolved, cam, vp)
+      const centre = toScreen(pose, cam, vp)
       const fp = robot.identity?.footprint
       const lengthM = fp?.length_m ?? 0.9
       const widthM = fp?.width_m ?? 0.7

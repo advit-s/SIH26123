@@ -355,7 +355,7 @@ export function MapCanvas(props: MapCanvasProps) {
       ) : null}
 
       {layers.evaluatorTruth ? (
-        <div className="pointer-events-none absolute left-3 top-3">
+        <div className="pointer-events-none absolute bottom-16 left-3">
           <div className="hatch-steel border border-steel bg-panel px-2 py-1">
             <span className="stencil text-[10px] text-steel">evaluator truth — not agent knowledge</span>
           </div>

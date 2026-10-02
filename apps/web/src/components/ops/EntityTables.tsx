@@ -67,16 +67,31 @@ export function RobotTable({
         ),
     },
     {
-      key: "age",
-      header: "evidence age",
+      key: "browserage",
+      header: "browser age",
       mono: true,
-      width: "96px",
+      width: "110px",
       sortValue: (r) => poseAges.get(r.robot_id) ?? Number.POSITIVE_INFINITY,
       render: (r) => {
-        const a = poseAges.get(r.robot_id) ?? r.pose_age_s
-        if (a === null || a === undefined) return <span className="text-ink-3">{UNAVAILABLE}</span>
+        // Browser-side evidence age only. The agent's own declared age is a
+        // different fact and is shown separately so the two are never conflated.
+        const a = poseAges.get(r.robot_id) ?? null
+        if (a === null) return <span className="whitespace-nowrap text-amber">no telemetry</span>
         return <span className={a > 2.5 ? "text-amber" : "text-ink-2"}>{age(a)}</span>
       },
+    },
+    {
+      key: "agentage",
+      header: "agent age",
+      mono: true,
+      width: "88px",
+      sortValue: (r) => r.pose_age_s ?? Number.POSITIVE_INFINITY,
+      render: (r) =>
+        r.pose_age_s === null ? (
+          <span className="whitespace-nowrap text-ink-3">{UNAVAILABLE}</span>
+        ) : (
+          <span className="whitespace-nowrap text-ink-3">{age(r.pose_age_s)}</span>
+        ),
     },
     {
       key: "motion",

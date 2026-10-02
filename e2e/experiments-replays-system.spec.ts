@@ -8,6 +8,24 @@ import { requireApi } from "./tests/api-probe"
  * asserted in a real browser: an ineligible run never gets a success badge, and
  * a replay clearly announces that it is recorded playback.
  */
+/**
+ * Wait for the batch list, then skip with a reason if there is genuinely no
+ * batch. An instant `count()` would race the poll and skip a batch that is
+ * about to appear.
+ */
+async function openFirstBatch(page: import("@playwright/test").Page): Promise<void> {
+  const rows = page.getByTestId("batch-row")
+  try {
+    await expect(rows.first()).toBeVisible({ timeout: 10_000 })
+  } catch {
+    test.skip(
+      true,
+      "The API is running but no experiment batch exists yet. Create one with `pnpm benchmark:smoke` (or `pnpm benchmark:full`) and re-run this spec.",
+    )
+  }
+  await rows.first().getByRole("button", { name: /inspect|open/ }).click()
+}
+
 test.describe("experiments", () => {
   test("shows the matrix and refuses a success badge for an ineligible run", async ({ page }) => {
     await requireApi()
@@ -17,15 +35,9 @@ test.describe("experiments", () => {
     await expect(page.getByText("experiment batches")).toBeVisible()
     await expect(page.getByText("new experiment batch")).toBeVisible()
 
-    // Open the first batch if one exists.
-    const inspect = page.getByRole("button", { name: /inspect|open/ }).first()
-    if ((await inspect.count()) === 0) {
-      test.skip(
-        true,
-        "The API is running but no experiment batch exists yet. Create one with `pnpm benchmark:smoke` (or `pnpm benchmark:full`) and re-run this spec.",
-      )
-    }
-    await inspect.click()
+    // Open the first batch. Scoped to the batch list: the nav rail's
+    // "…inspectors" label would otherwise match the same role and name.
+    await openFirstBatch(page)
 
     // Configuration differences are shown before any comparison number.
     await expect(page.getByTestId("config-diff")).toBeVisible()
@@ -40,12 +52,12 @@ test.describe("experiments", () => {
   test("explains an absent paired comparison instead of implying parity", async ({ page }) => {
     await requireApi()
     await page.goto("/#/experiments")
-    const inspect = page.getByRole("button", { name: /inspect|open/ }).first()
-    if ((await inspect.count()) === 0) {
-      test.skip(true, "No experiment batch exists yet. Create one with `pnpm benchmark:smoke` and re-run this spec.")
-    }
-    await inspect.click()
+    await openFirstBatch(page)
     await expect(page.getByText(/≥20 % makespan figure is a target/)).toBeVisible()
+    // A batch with no eligible pair must say so rather than showing a badge.
+    const noPairs = page.getByTestId("no-eligible-pairs")
+    const summary = page.getByTestId("paired-summary")
+    await expect(noPairs.or(summary).first()).toBeVisible()
   })
 })
 
@@ -55,9 +67,11 @@ test.describe("replays", () => {
     await page.goto("/#/replays")
 
     await expect(page.getByTestId("route")).toHaveAttribute("data-route", "replays")
-    // Recorded playback is visibly a different activity from watching a run.
-    await expect(page.getByText("RECORDED PLAYBACK")).toBeVisible()
-    await expect(page.getByText(/Nothing is being simulated/)).toBeVisible()
+    // Recorded playback is visibly a different activity from watching a run:
+    // the mode plate says so, and so does the page chrome.
+    await expect(page.getByTestId("execution-mode")).toHaveText("RECORDED PLAYBACK")
+    await expect(page.getByTestId("route").getByText("recorded playback")).toBeVisible()
+    await expect(page.getByText(/Nothing is being simulated/).first()).toBeVisible()
 
     const row = page.getByTestId("replay-index-row").first()
     if ((await row.count()) === 0) {

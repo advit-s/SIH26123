@@ -33,19 +33,30 @@ export function RobotInspector({
   robot,
   freshnessHorizonS,
   liveAgeS,
+  streamLive,
 }: {
   robot: RobotInspection
   freshnessHorizonS: number
+  /** Age, in seconds, of the newest telemetry frame *this browser* received. */
   liveAgeS: number | null
+  /** False whenever the stream is not demonstrably live. */
+  streamLive: boolean
 }) {
   const theme = useViewStore((s) => s.theme)
   const select = useViewStore((s) => s.select)
   const colour = robotColor(robot.robot_id, theme)
 
   const pose = robot.pose_estimate?.pose ?? null
-  // Prefer the live stream's own age; fall back to the API's declared pose age.
-  const ageS = liveAgeS ?? robot.pose_age_s
-  const freshness = describePoseFreshness(ageS, freshnessHorizonS)
+  /**
+   * Freshness is judged on *browser* evidence only. The agent's own declared
+   * `pose_age_s` answers a different question ("how old is my own
+   * observation?"); it does not make this browser's picture fresh. When the
+   * stream is down, the browser's evidence is absent no matter what the agent
+   * says, and the pose is frozen.
+   */
+  const agentAgeS = robot.pose_age_s
+  const browserAgeS = streamLive ? liveAgeS : null
+  const freshness = describePoseFreshness(browserAgeS, freshnessHorizonS)
   const poseTone: Tone = freshness.tone === "live" ? "teal" : freshness.tone === "aging" ? "amber" : "red"
 
   const sigma = robot.pose_estimate?.uncertainty.sigma_m
@@ -108,8 +119,15 @@ export function RobotInspector({
             <Field label="heading σ" mono>
               {headingSigma == null ? <span className="text-ink-3">{UNAVAILABLE}</span> : <>{headingSigma.toFixed(3)} rad</>}
             </Field>
-            <Field label="evidence age" mono>
-              {ageS === null ? <span className="text-ink-3">{UNAVAILABLE}</span> : <>{age(ageS)}</>}
+            <Field
+              label="browser age"
+              mono
+              hint="Age of the newest telemetry frame received by *this browser*. This is the age that decides whether the pose is frozen."
+            >
+              {browserAgeS === null ? <span className="text-ink-3">{UNAVAILABLE}</span> : <>{age(browserAgeS)}</>}
+            </Field>
+            <Field label="agent age" mono hint="Age of the agent's own pose observation, as the agent declares it.">
+              {agentAgeS === null ? <span className="text-ink-3">{UNAVAILABLE}</span> : <>{age(agentAgeS)}</>}
             </Field>
             <Field label="observed at" mono>
               {observedAt == null ? (

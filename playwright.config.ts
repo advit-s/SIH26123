@@ -30,6 +30,13 @@ export default defineConfig({
   testMatch: /.*\.spec\.ts$/,
   outputDir: "var/playwright",
   fullyParallel: false,
+  /**
+   * One worker by default. Each cockpit page owns a WebGL canvas plus a 1 s
+   * telemetry poll against a single local API; running the five spec files in
+   * parallel starves the browser contexts and shows up as teardown timeouts
+   * rather than as real assertion failures.
+   */
+  workers: Number(process.env.PLAYWRIGHT_WORKERS ?? 1),
   forbidOnly: !!process.env.CI,
   retries: process.env.CI ? 1 : 0,
   // A cockpit spec asserts evidence-bearing text. A timeout here means the API

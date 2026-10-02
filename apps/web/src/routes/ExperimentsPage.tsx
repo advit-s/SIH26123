@@ -186,7 +186,7 @@ export function ExperimentsPage() {
             ) : (
               <ul className="divide-y divide-rule">
                 {matrix.data?.batches.map((batch) => (
-                  <li key={batch.batch_id} className="flex items-center gap-2 px-3 py-2">
+                  <li key={batch.batch_id} className="flex items-center gap-2 px-3 py-2" data-testid="batch-row">
                     <span className="num min-w-0 flex-1 break-all text-[12px] text-ink">{batch.name}</span>
                     <span className="num text-[10px] text-ink-3">{batch.run_count} runs</span>
                     <Chip tone={batch.state === "completed" ? "teal" : batch.state === "failed" ? "red" : "amber"}>

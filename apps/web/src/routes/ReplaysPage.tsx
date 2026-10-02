@@ -12,7 +12,7 @@
  * happened after the cursor simply does not exist in the new state. See
  * `../lib/replay/reducer.ts`.
  */
-import { useEffect, useMemo, useState } from "react"
+import { useEffect, useMemo, useRef, useState } from "react"
 import type { DomainEvent } from "@niharamesh/contracts/generated"
 import { SCHEMA_VERSION } from "@niharamesh/contracts/generated"
 import { useEvents, useReplayDetail, useReplayIndex } from "../lib/api/queries"
@@ -142,10 +142,18 @@ function ReplayPlayer({
   const [playing, setPlaying] = useState(false)
   const [speed, setSpeed] = useState(1)
 
-  // Keep the cursor inside the loaded window without ever moving *forward*
-  // implicitly past what the operator asked for.
+  // Keep the cursor inside the loaded window. On the *first* load the cursor is
+  // a placeholder, so it moves to the end of the log: opening a replay should
+  // show the completed world, not an empty one at seq 0. After that it only ever
+  // clamps down, so loading more events never yanks the operator's position.
+  const cursorInitialised = useRef(false)
   useEffect(() => {
     if (bounds.last === null) return
+    if (!cursorInitialised.current) {
+      cursorInitialised.current = true
+      setCursorSeq(bounds.last)
+      return
+    }
     if (cursorSeq > bounds.last) setCursorSeq(bounds.last)
   }, [bounds.last, cursorSeq])
 

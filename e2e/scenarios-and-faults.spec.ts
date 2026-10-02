@@ -29,7 +29,9 @@ test.describe("scenarios", () => {
     // Author an invalid layout: a zone with a negative protected extent. Nothing
     // is auto-repaired, so the document must still be that way after validation.
     await page.getByRole("button", { name: /Add exclusive zone/ }).click()
-    const extentWidth = page.getByLabel("w").first()
+    // `exact: true` matters: a substring label also matches the theme toggle's
+    // "…view" aria-label.
+    const extentWidth = page.getByLabel("w", { exact: true }).first()
     await extentWidth.fill("-2")
     await extentWidth.blur()
 
@@ -38,21 +40,25 @@ test.describe("scenarios", () => {
     await expect(validation).toBeVisible()
 
     // Either the API rejects it, or (if it accepted) the verdict must be shown.
-    // Both outcomes are honest; silently "fixing" the draft is not.
+    // All three outcomes are honest; silently "fixing" the draft is not. Note the
+    // third state: an unvalidated draft must never read as a verdict.
     await expect(page.getByTestId("validation-verdict")).toBeVisible()
-    const verdict = await page.getByTestId("validation-verdict").innerText()
-    expect(["launchable", "launch blocked"]).toContain(verdict.trim())
+    const verdict = (await page.getByTestId("validation-verdict").innerText()).trim()
+    expect(["launchable", "launch blocked", "not validated yet"].some((v) => verdict.includes(v))).toBe(true)
+    expect(page.getByText(/invalid draft|not been validated|launch is blocked/i).first()).toBeVisible()
 
     // The launch button never bypasses validation.
     await page.getByTestId("launch-scenario").click()
     await expect(page.getByTestId("launch-scenario")).toBeEnabled()
+    // And the route must not have changed to Operations.
+    await expect(page.getByTestId("route")).toHaveAttribute("data-route", "scenarios")
   })
 
   test("preserves an invalid draft rather than repairing it", async ({ page }) => {
     await requireApi()
     await page.goto("/#/scenarios")
     await page.getByRole("button", { name: /Add exclusive zone/ }).click()
-    const extentWidth = page.getByLabel("w").first()
+    const extentWidth = page.getByLabel("w", { exact: true }).first()
     await extentWidth.fill("-2")
     await extentWidth.blur()
     // The value the author typed is still there.

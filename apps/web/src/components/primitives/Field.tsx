@@ -12,6 +12,10 @@ import { UNAVAILABLE, age as fmtAge } from "../../lib/format"
 import { Chip } from "./Chip"
 import type { Tone } from "./tone"
 
+/**
+ * Read-only field: `<dt>` label + `<dd>` value. Used everywhere an inspector
+ * *reports* something.
+ */
 export function Field({
   label,
   children,
@@ -32,6 +36,29 @@ export function Field({
       </dt>
       <dd className={`min-w-0 break-words text-[12px] text-ink ${mono ? "num" : ""}`}>{children}</dd>
     </div>
+  )
+}
+
+/**
+ * Editable field: a real `<label>` wrapping the control, so the input's
+ * accessible name comes from the visible text. A `<dt>` cannot label a control.
+ */
+export function ControlField({
+  label,
+  children,
+  hint,
+  className = "",
+}: {
+  label: string
+  children: ReactNode
+  hint?: string
+  className?: string
+}) {
+  return (
+    <label className={`block min-w-0 ${className}`} title={hint}>
+      <span className="stencil block text-[9px] text-ink-3">{label}</span>
+      <span className="mt-0.5 block">{children}</span>
+    </label>
   )
 }
 

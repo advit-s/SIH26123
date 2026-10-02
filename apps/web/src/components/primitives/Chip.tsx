@@ -12,15 +12,18 @@ export function Chip({
   glyph = true,
   title,
   className = "",
+  "data-testid": testId,
 }: {
   children: ReactNode
   tone?: Tone
   glyph?: boolean
   title?: string
   className?: string
+  "data-testid"?: string
 }) {
   return (
     <span
+      data-testid={testId}
       title={title}
       className={`inline-flex items-center gap-1 whitespace-nowrap border px-1.5 py-[1px] text-[10px] leading-4 ${TONE_BORDER[tone]} ${TONE_BG[tone]} ${TONE_TEXT[tone]} ${className}`}
     >

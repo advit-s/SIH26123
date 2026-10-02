@@ -6,18 +6,45 @@
 import type { ReactNode } from "react"
 import { TONE_BG, TONE_BORDER, TONE_GLYPH, TONE_TEXT, type Tone } from "./tone"
 
+/**
+ * Machine panels. Flat faces, hairline rules, corner ticks, 2 px radius.
+ * Deliberately *not* cards: the cockpit is a single instrument panel, and a
+ * field of identical rounded cards would read as a generic dashboard.
+ *
+ * `aria-label` and `data-testid` are forwarded. Dropping either would silently
+ * unlabel or unaddress a panel, which is exactly the quiet regression a cockpit
+ * must not have.
+ */
 export function Panel({
   children,
   className = "",
   ticks = false,
   as: Tag = "section",
+  "aria-label": ariaLabel,
+  "aria-labelledby": ariaLabelledBy,
+  "data-testid": testId,
+  id,
 }: {
   children: ReactNode
   className?: string
   ticks?: boolean
   as?: "section" | "div" | "aside"
+  "aria-label"?: string
+  "aria-labelledby"?: string
+  "data-testid"?: string
+  id?: string
 }) {
-  return <Tag className={`panel flex min-h-0 flex-col ${ticks ? "panel-ticks" : ""} ${className}`}>{children}</Tag>
+  return (
+    <Tag
+      id={id}
+      data-testid={testId}
+      aria-label={ariaLabel}
+      aria-labelledby={ariaLabelledBy}
+      className={`panel flex min-h-0 flex-col ${ticks ? "panel-ticks" : ""} ${className}`}
+    >
+      {children}
+    </Tag>
+  )
 }
 
 export function PanelHeader({

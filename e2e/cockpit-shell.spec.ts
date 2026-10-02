@@ -32,8 +32,8 @@ test.describe("cockpit shell", () => {
 
     // Run identity and the clocks are labelled with their domains.
     await expect(bar.getByTestId("context-run-id")).toBeVisible()
-    await expect(bar.getByText("sim time (logical)")).toBeVisible()
-    await expect(bar.getByText("wall time (display UTC)")).toBeVisible()
+    await expect(bar.getByText("sim s · logical")).toBeVisible()
+    await expect(bar.getByText("wall · UTC")).toBeVisible()
 
     // The authority boundary is stated in words, once, at the bottom.
     await expect(page.getByTestId("authority-reminder")).toContainText("never advances robot truth")
@@ -63,6 +63,13 @@ test.describe("cockpit shell", () => {
     await page.setViewportSize({ width: 1280, height: 720 })
     await page.goto("/#/operations")
     await expect(page.getByTestId("execution-mode")).toBeVisible()
-    await expect(page.getByText("stream live").or(page.getByText(/stream (idle|connecting|reconnecting)/))).toBeVisible()
+    // Whatever the stream is doing, the bar says so in words next to the mode.
+    await expect(
+      page
+        .getByText("stream live")
+        .or(page.getByText(/stream (idle|connecting|reconnecting|closed|error)/))
+        .first(),
+    ).toBeVisible()
+    await expect(page.getByTestId("context-bar").getByText("evidence")).toBeVisible()
   })
 })

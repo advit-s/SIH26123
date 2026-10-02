@@ -22,7 +22,7 @@ import { useClearFault, useInjectFault } from "../../lib/api/queries"
 import { simClock, titleCase } from "../../lib/format"
 import { Button } from "../primitives/Button"
 import { Chip } from "../primitives/Chip"
-import { Field } from "../primitives/Field"
+import { Field, ControlField } from "../primitives/Field"
 import { HatchStrip, Panel, PanelBody, PanelHeader, Strip } from "../primitives/Panel"
 import type { Tone } from "../primitives/tone"
 
@@ -225,7 +225,7 @@ export function FaultLab({
           </p>
 
           <div className="mt-2 grid grid-cols-2 gap-2">
-            <Field label="fault kind">
+            <ControlField label="fault kind">
               <select
                 value={form.kind}
                 onChange={(event) => update("kind", event.target.value as FaultKind)}
@@ -242,8 +242,8 @@ export function FaultLab({
                   </optgroup>
                 ))}
               </select>
-            </Field>
-            <Field label="target agent">
+            </ControlField>
+            <ControlField label="target agent">
               <select
                 value={form.robot}
                 onChange={(event) => update("robot", event.target.value)}
@@ -257,11 +257,11 @@ export function FaultLab({
                   </option>
                 ))}
               </select>
-            </Field>
+            </ControlField>
 
             {CHANNEL_FAULTS.includes(form.kind) ? (
               <>
-                <Field label="sender (channel source)">
+                <ControlField label="sender (channel source)">
                   <select
                     value={form.sender}
                     onChange={(event) => update("sender", event.target.value)}
@@ -275,8 +275,8 @@ export function FaultLab({
                       </option>
                     ))}
                   </select>
-                </Field>
-                <Field label="receiver (channel sink)">
+                </ControlField>
+                <ControlField label="receiver (channel sink)">
                   <select
                     value={form.receiver}
                     onChange={(event) => update("receiver", event.target.value)}
@@ -290,11 +290,11 @@ export function FaultLab({
                       </option>
                     ))}
                   </select>
-                </Field>
+                </ControlField>
               </>
             ) : null}
 
-            <Field label="start at (sim s)">
+            <ControlField label="start at (sim s)">
               <input
                 type="number"
                 min={0}
@@ -303,8 +303,8 @@ export function FaultLab({
                 onChange={(event) => update("startAtS", event.target.value)}
                 className="num w-full border border-rule bg-raised px-1 py-0.5 text-[11px] text-ink"
               />
-            </Field>
-            <Field label="duration (sim s)">
+            </ControlField>
+            <ControlField label="duration (sim s)">
               <input
                 type="number"
                 min={0.1}
@@ -313,30 +313,31 @@ export function FaultLab({
                 onChange={(event) => update("durationS", event.target.value)}
                 className="num w-full border border-rule bg-raised px-1 py-0.5 text-[11px] text-ink"
               />
-            </Field>
-            <Field label="seed">
+            </ControlField>
+            <ControlField label="seed">
               <input
                 type="number"
                 value={form.seed}
                 onChange={(event) => update("seed", event.target.value)}
                 className="num w-full border border-rule bg-raised px-1 py-0.5 text-[11px] text-ink"
               />
-            </Field>
+            </ControlField>
             {form.kind === "obstacle_insert" ? (
-              <Field label="zone (optional)">
+              <ControlField label="zone (optional)">
                 <input
                   value={form.zoneId}
                   onChange={(event) => update("zoneId", event.target.value)}
                   placeholder="e.g. Z-INTERSECTION-A"
                   className="num w-full border border-rule bg-raised px-1 py-0.5 text-[11px] text-ink"
                 />
-              </Field>
+              </ControlField>
             ) : null}
           </div>
 
           <Field label="expected invariant" className="mt-2">
             <textarea
               value={form.expectedInvariant}
+              aria-label="expected invariant"
               onChange={(event) => update("expectedInvariant", event.target.value)}
               rows={2}
               placeholder="e.g. AMR2 keeps physical occupancy of Z-2 while its heartbeat is lost, and refuses entry until release or recovery."

@@ -117,8 +117,24 @@ describe("describeChannelFreshness", () => {
 })
 
 describe("RobotInspector", () => {
+  function renderInspector(props: {
+    robot?: RobotInspection
+    freshnessHorizonS?: number
+    liveAgeS: number | null
+    streamLive?: boolean
+  }) {
+    return render(
+      <RobotInspector
+        robot={props.robot ?? robot()}
+        freshnessHorizonS={props.freshnessHorizonS ?? HORIZON_S}
+        liveAgeS={props.liveAgeS}
+        streamLive={props.streamLive ?? true}
+      />,
+    )
+  }
+
   it("shows the frozen pose and its evidence age when telemetry is stale", () => {
-    render(<RobotInspector robot={robot()} freshnessHorizonS={HORIZON_S} liveAgeS={11.2} />)
+    renderInspector({ liveAgeS: 11.2 })
 
     // The pose shown is the last known one, unchanged.
     expect(screen.getByTestId("robot-pose")).toHaveTextContent("7.25 m E")
@@ -132,44 +148,42 @@ describe("RobotInspector", () => {
   })
 
   it("does not claim a freeze while telemetry is fresh", () => {
-    render(<RobotInspector robot={robot()} freshnessHorizonS={HORIZON_S} liveAgeS={0.2} />)
+    renderInspector({ liveAgeS: 0.2 })
     expect(screen.queryByTestId("robot-frozen-pose")).toBeNull()
     expect(screen.getByTestId("robot-pose")).toHaveTextContent("7.25 m E")
   })
 
   it("states that no pose evidence exists rather than rendering the origin", () => {
-    render(
-      <RobotInspector
-        robot={robot({ pose_estimate: null, pose_age_s: null })}
-        freshnessHorizonS={HORIZON_S}
-        liveAgeS={null}
-      />,
-    )
+    renderInspector({ robot: robot({ pose_estimate: null, pose_age_s: null }), liveAgeS: null })
     expect(screen.getByText("No pose evidence has been received for this robot.")).toBeInTheDocument()
     expect(screen.queryByTestId("robot-pose")).toBeNull()
   })
 
+  it("freezes the pose when the stream is down, however fresh the agent says it is", () => {
+    // The agent declares a 200 ms old observation, but *this browser* has
+    // received no telemetry. Freshness must be judged on browser evidence.
+    renderInspector({ liveAgeS: null, streamLive: false })
+    expect(screen.getByTestId("robot-frozen-pose")).toHaveTextContent("No pose evidence")
+    expect(screen.getByText("browser age")).toBeInTheDocument()
+    // The agent's own claim is still shown, as a separate, labelled fact.
+    expect(screen.getByText("agent age")).toBeInTheDocument()
+  })
+
   it("labels battery provenance so a simulated charge is never read as measured", () => {
-    render(<RobotInspector robot={robot()} freshnessHorizonS={HORIZON_S} liveAgeS={0.2} />)
+    renderInspector({ liveAgeS: 0.2 })
     expect(screen.getByText("simulated")).toBeInTheDocument()
     expect(screen.getByText(/Battery is not a measured value in this run/)).toBeInTheDocument()
   })
 
   it("renders unavailable battery as unavailable, not as zero percent", () => {
-    render(
-      <RobotInspector
-        robot={robot({ battery: { source: "unavailable", fraction: null } })}
-        freshnessHorizonS={HORIZON_S}
-        liveAgeS={0.2}
-      />,
-    )
+    renderInspector({ robot: robot({ battery: { source: "unavailable", fraction: null } }), liveAgeS: 0.2 })
     const batteryField = screen.getByText("battery").closest("div")?.parentElement
     expect(batteryField?.textContent).toContain("unavailable")
     expect(batteryField?.textContent).not.toContain("0%")
   })
 
   it("explains why the robot is waiting and what would clear the block", () => {
-    render(<RobotInspector robot={robot()} freshnessHorizonS={HORIZON_S} liveAgeS={0.2} />)
+    renderInspector({ liveAgeS: 0.2 })
     const why = screen.getByTestId("why-waiting")
     expect(why).toHaveTextContent("Blocked.")
     expect(why).toHaveTextContent("Z-2 is promised to AMR3")
@@ -181,7 +195,7 @@ describe("RobotInspector", () => {
   })
 
   it("shows the boot session identity an operator needs to attribute a message", () => {
-    render(<RobotInspector robot={robot()} freshnessHorizonS={HORIZON_S} liveAgeS={0.2} />)
+    renderInspector({ liveAgeS: 0.2 })
     expect(screen.getByText("sess-2")).toBeInTheDocument()
     expect(screen.getByText(/pid 4242/)).toBeInTheDocument()
     expect(screen.getByText(/9102/)).toBeInTheDocument()

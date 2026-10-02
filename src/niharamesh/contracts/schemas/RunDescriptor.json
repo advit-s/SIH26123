@@ -1,0 +1,132 @@
+{
+  "$defs": {
+    "RunOutcome": {
+      "enum": [
+        "success",
+        "unsafe",
+        "degraded",
+        "expected_safe_stop",
+        "failed",
+        "timed_out",
+        "cancelled",
+        "incomplete_evidence"
+      ],
+      "title": "RunOutcome",
+      "type": "string"
+    },
+    "RunState": {
+      "enum": [
+        "queued",
+        "running",
+        "paused",
+        "completed",
+        "unsafe",
+        "failed",
+        "timed_out",
+        "cancelled"
+      ],
+      "title": "RunState",
+      "type": "string"
+    }
+  },
+  "$id": "https://niharamesh.local/schemas/RunDescriptor.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "description": "Lightweight listing record for the experiments matrix.",
+  "properties": {
+    "collisions": {
+      "minimum": 0,
+      "title": "Collisions",
+      "type": "integer"
+    },
+    "coordination_policy": {
+      "title": "Coordination Policy",
+      "type": "string"
+    },
+    "created_utc_ns": {
+      "title": "Created Utc Ns",
+      "type": "integer"
+    },
+    "evidence_complete": {
+      "default": true,
+      "title": "Evidence Complete",
+      "type": "boolean"
+    },
+    "idempotency_key": {
+      "default": "",
+      "maxLength": 64,
+      "title": "Idempotency Key",
+      "type": "string"
+    },
+    "makespan_s": {
+      "anyOf": [
+        {
+          "minimum": 0.0,
+          "type": "number"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Makespan S"
+    },
+    "note": {
+      "default": "",
+      "maxLength": 160,
+      "title": "Note",
+      "type": "string"
+    },
+    "outcome": {
+      "$ref": "#/$defs/RunOutcome"
+    },
+    "run_id": {
+      "maxLength": 40,
+      "minLength": 1,
+      "title": "Run Id",
+      "type": "string"
+    },
+    "scenario_revision": {
+      "title": "Scenario Revision",
+      "type": "integer"
+    },
+    "seed": {
+      "title": "Seed",
+      "type": "integer"
+    },
+    "sim_duration_s": {
+      "minimum": 0.0,
+      "title": "Sim Duration S",
+      "type": "number"
+    },
+    "state": {
+      "$ref": "#/$defs/RunState"
+    },
+    "tasks_completed": {
+      "minimum": 0,
+      "title": "Tasks Completed",
+      "type": "integer"
+    },
+    "tasks_total": {
+      "minimum": 0,
+      "title": "Tasks Total",
+      "type": "integer"
+    }
+  },
+  "required": [
+    "run_id",
+    "state",
+    "outcome",
+    "coordination_policy",
+    "scenario_revision",
+    "seed",
+    "created_utc_ns",
+    "sim_duration_s",
+    "tasks_total",
+    "tasks_completed",
+    "collisions"
+  ],
+  "title": "RunDescriptor",
+  "type": "object",
+  "x-niharamesh-version": "1.0.0"
+}

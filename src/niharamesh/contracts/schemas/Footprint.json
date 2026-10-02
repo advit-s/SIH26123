@@ -1,0 +1,55 @@
+{
+  "$id": "https://niharamesh.local/schemas/Footprint.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "description": "Finite robot geometry, plus payload overhang when carrying.\n\n``length_m``/``width_m`` describe the chassis. ``payload_length_m`` and\n``payload_width_m`` describe the largest carried load. ``payload_offset_m``\nis the distance from the chassis centre to the payload centre along the\nchassis ``+x`` axis (positive = front overhang).",
+  "properties": {
+    "length_m": {
+      "exclusiveMinimum": 0.0,
+      "maximum": 5.0,
+      "title": "Length M",
+      "type": "number"
+    },
+    "payload_length_m": {
+      "default": 0.0,
+      "maximum": 5.0,
+      "minimum": 0.0,
+      "title": "Payload Length M",
+      "type": "number"
+    },
+    "payload_offset_m": {
+      "default": 0.0,
+      "maximum": 1.0,
+      "minimum": -1.0,
+      "title": "Payload Offset M",
+      "type": "number"
+    },
+    "payload_width_m": {
+      "default": 0.0,
+      "maximum": 5.0,
+      "minimum": 0.0,
+      "title": "Payload Width M",
+      "type": "number"
+    },
+    "turning_radius_m": {
+      "default": 0.35,
+      "exclusiveMinimum": 0.0,
+      "maximum": 5.0,
+      "title": "Turning Radius M",
+      "type": "number"
+    },
+    "width_m": {
+      "exclusiveMinimum": 0.0,
+      "maximum": 5.0,
+      "title": "Width M",
+      "type": "number"
+    }
+  },
+  "required": [
+    "length_m",
+    "width_m"
+  ],
+  "title": "Footprint",
+  "type": "object",
+  "x-niharamesh-version": "1.0.0"
+}

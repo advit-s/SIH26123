@@ -1,0 +1,73 @@
+{
+  "$id": "https://niharamesh.local/schemas/Task.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "description": "A transport job. Generated independently of assignment.",
+  "properties": {
+    "drop_station_id": {
+      "maxLength": 40,
+      "title": "Drop Station Id",
+      "type": "string"
+    },
+    "pickup_station_id": {
+      "maxLength": 40,
+      "title": "Pickup Station Id",
+      "type": "string"
+    },
+    "priority": {
+      "default": 100,
+      "maximum": 1000,
+      "minimum": 0,
+      "title": "Priority",
+      "type": "integer"
+    },
+    "release_at_s": {
+      "default": 0.0,
+      "maximum": 86400.0,
+      "minimum": 0.0,
+      "title": "Release At S",
+      "type": "number"
+    },
+    "required_capabilities": {
+      "default": [],
+      "items": {
+        "type": "string"
+      },
+      "title": "Required Capabilities",
+      "type": "array"
+    },
+    "schema_version": {
+      "default": "1.0.0",
+      "title": "Schema Version",
+      "type": "string"
+    },
+    "service_time_s": {
+      "default": 4.0,
+      "maximum": 3600.0,
+      "minimum": 0.0,
+      "title": "Service Time S",
+      "type": "number"
+    },
+    "task_id": {
+      "maxLength": 40,
+      "minLength": 1,
+      "title": "Task Id",
+      "type": "string"
+    },
+    "weight_kg": {
+      "default": 5.0,
+      "maximum": 1000.0,
+      "minimum": 0.0,
+      "title": "Weight Kg",
+      "type": "number"
+    }
+  },
+  "required": [
+    "task_id",
+    "pickup_station_id",
+    "drop_station_id"
+  ],
+  "title": "Task",
+  "type": "object",
+  "x-niharamesh-version": "1.0.0"
+}

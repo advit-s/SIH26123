@@ -1,0 +1,139 @@
+{
+  "$defs": {
+    "Pose2": {
+      "additionalProperties": false,
+      "description": "Planar pose in metres/radians. Distinct from a *measured* pose estimate.",
+      "properties": {
+        "theta": {
+          "maximum": 1000000000.0,
+          "minimum": -1000000000.0,
+          "title": "Theta",
+          "type": "number"
+        },
+        "x": {
+          "maximum": 1000000000.0,
+          "minimum": -1000000000.0,
+          "title": "X",
+          "type": "number"
+        },
+        "y": {
+          "maximum": 1000000000.0,
+          "minimum": -1000000000.0,
+          "title": "Y",
+          "type": "number"
+        }
+      },
+      "required": [
+        "x",
+        "y",
+        "theta"
+      ],
+      "title": "Pose2",
+      "type": "object"
+    },
+    "TimeDomain": {
+      "description": "Named clock domains. Values are never mixed across domains.\n\n``LOGICAL``\n    Injected logical simulation time. Freezes when the harness pauses and\n    advances under acceleration. Used by the deterministic mode.\n``SIM_SECONDS``\n    Simulation seconds elapsed since the declared common run start. Derived\n    from ``LOGICAL``; identical semantics, different unit framing.\n``MONOTONIC``\n    The agent's own ``time.monotonic_ns()``. Never comparable across\n    processes without an explicit measured offset *and* uncertainty.\n``DISPLAY_UTC``\n    Wall-clock UTC for human display only. Never used for expiry.",
+      "enum": [
+        "logical",
+        "sim_seconds",
+        "monotonic",
+        "display_utc"
+      ],
+      "title": "TimeDomain",
+      "type": "string"
+    },
+    "UncertaintyModel": {
+      "additionalProperties": false,
+      "description": "Declared localisation uncertainty. Never implicit.\n\n``kind`` must be reported so a consumer can tell a modelled sigma from a\nhard bound. ``sigma_m`` is the 1-sigma standard deviation of planar\nposition error; ``sigma_rad`` the 1-sigma of heading error.",
+      "properties": {
+        "kind": {
+          "enum": [
+            "gaussian_sigma",
+            "hard_bound",
+            "unknown"
+          ],
+          "title": "Kind",
+          "type": "string"
+        },
+        "max_m": {
+          "default": 0.0,
+          "maximum": 1000000000.0,
+          "minimum": -1000000000.0,
+          "title": "Max M",
+          "type": "number"
+        },
+        "sigma_m": {
+          "default": 0.0,
+          "maximum": 1000000000.0,
+          "minimum": -1000000000.0,
+          "title": "Sigma M",
+          "type": "number"
+        },
+        "sigma_rad": {
+          "default": 0.0,
+          "maximum": 1000000000.0,
+          "minimum": -1000000000.0,
+          "title": "Sigma Rad",
+          "type": "number"
+        },
+        "source": {
+          "default": "configured-assumption",
+          "maxLength": 64,
+          "title": "Source",
+          "type": "string"
+        }
+      },
+      "required": [
+        "kind"
+      ],
+      "title": "UncertaintyModel",
+      "type": "object"
+    }
+  },
+  "$id": "https://niharamesh.local/schemas/PoseEstimate.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "description": "An estimate with its observation time and uncertainty.\n\nThis is deliberately *not* a pose: an estimate can be stale, and the system\nmust be able to represent \"last known pose, age 3.2 s, uncertain\".",
+  "properties": {
+    "frame_id": {
+      "default": "warehouse",
+      "maxLength": 32,
+      "title": "Frame Id",
+      "type": "string"
+    },
+    "fused": {
+      "default": false,
+      "title": "Fused",
+      "type": "boolean"
+    },
+    "map_id": {
+      "maxLength": 64,
+      "title": "Map Id",
+      "type": "string"
+    },
+    "observed_at_ns": {
+      "minimum": 0,
+      "title": "Observed At Ns",
+      "type": "integer"
+    },
+    "pose": {
+      "$ref": "#/$defs/Pose2"
+    },
+    "time_domain": {
+      "$ref": "#/$defs/TimeDomain"
+    },
+    "uncertainty": {
+      "$ref": "#/$defs/UncertaintyModel"
+    }
+  },
+  "required": [
+    "map_id",
+    "pose",
+    "observed_at_ns",
+    "time_domain",
+    "uncertainty"
+  ],
+  "title": "PoseEstimate",
+  "type": "object",
+  "x-niharamesh-version": "1.0.0"
+}

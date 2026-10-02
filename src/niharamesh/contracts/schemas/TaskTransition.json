@@ -1,0 +1,79 @@
+{
+  "$defs": {
+    "TaskState": {
+      "enum": [
+        "available",
+        "claimed",
+        "pickup_confirmed",
+        "in_transit",
+        "delivered",
+        "recovery_required",
+        "abandoned"
+      ],
+      "title": "TaskState",
+      "type": "string"
+    }
+  },
+  "$id": "https://niharamesh.local/schemas/TaskTransition.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "properties": {
+    "at_ns": {
+      "minimum": 0,
+      "title": "At Ns",
+      "type": "integer"
+    },
+    "from_state": {
+      "$ref": "#/$defs/TaskState"
+    },
+    "ownership_version": {
+      "minimum": 1,
+      "title": "Ownership Version",
+      "type": "integer"
+    },
+    "reason": {
+      "default": "",
+      "maxLength": 96,
+      "title": "Reason",
+      "type": "string"
+    },
+    "robot_id": {
+      "maxLength": 40,
+      "minLength": 1,
+      "title": "Robot Id",
+      "type": "string"
+    },
+    "robot_session": {
+      "maxLength": 40,
+      "title": "Robot Session",
+      "type": "string"
+    },
+    "task_id": {
+      "maxLength": 40,
+      "minLength": 1,
+      "title": "Task Id",
+      "type": "string"
+    },
+    "to_state": {
+      "$ref": "#/$defs/TaskState"
+    },
+    "transition_seq": {
+      "minimum": 1,
+      "title": "Transition Seq",
+      "type": "integer"
+    }
+  },
+  "required": [
+    "task_id",
+    "from_state",
+    "to_state",
+    "robot_id",
+    "robot_session",
+    "ownership_version",
+    "at_ns",
+    "transition_seq"
+  ],
+  "title": "TaskTransition",
+  "type": "object",
+  "x-niharamesh-version": "1.0.0"
+}

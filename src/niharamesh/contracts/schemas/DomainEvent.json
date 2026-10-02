@@ -1,0 +1,192 @@
+{
+  "$defs": {
+    "EventCategory": {
+      "enum": [
+        "authority",
+        "evaluation",
+        "task",
+        "planning",
+        "safety",
+        "fault",
+        "command",
+        "lifecycle",
+        "telemetry"
+      ],
+      "title": "EventCategory",
+      "type": "string"
+    },
+    "EventSeverity": {
+      "enum": [
+        "info",
+        "attention",
+        "fault",
+        "violation"
+      ],
+      "title": "EventSeverity",
+      "type": "string"
+    },
+    "TimeDomain": {
+      "description": "Named clock domains. Values are never mixed across domains.\n\n``LOGICAL``\n    Injected logical simulation time. Freezes when the harness pauses and\n    advances under acceleration. Used by the deterministic mode.\n``SIM_SECONDS``\n    Simulation seconds elapsed since the declared common run start. Derived\n    from ``LOGICAL``; identical semantics, different unit framing.\n``MONOTONIC``\n    The agent's own ``time.monotonic_ns()``. Never comparable across\n    processes without an explicit measured offset *and* uncertainty.\n``DISPLAY_UTC``\n    Wall-clock UTC for human display only. Never used for expiry.",
+      "enum": [
+        "logical",
+        "sim_seconds",
+        "monotonic",
+        "display_utc"
+      ],
+      "title": "TimeDomain",
+      "type": "string"
+    }
+  },
+  "$id": "https://niharamesh.local/schemas/DomainEvent.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "description": "One durable record. Append-only, globally sequenced by ``seq``.",
+  "properties": {
+    "category": {
+      "$ref": "#/$defs/EventCategory"
+    },
+    "correlation_id": {
+      "default": "",
+      "maxLength": 64,
+      "title": "Correlation Id",
+      "type": "string"
+    },
+    "event_time_ns": {
+      "minimum": 0,
+      "title": "Event Time Ns",
+      "type": "integer"
+    },
+    "fault_id": {
+      "anyOf": [
+        {
+          "maxLength": 64,
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Fault Id"
+    },
+    "payload": {
+      "additionalProperties": true,
+      "title": "Payload",
+      "type": "object"
+    },
+    "reason": {
+      "default": "",
+      "maxLength": 240,
+      "title": "Reason",
+      "type": "string"
+    },
+    "receive_time_domain": {
+      "$ref": "#/$defs/TimeDomain"
+    },
+    "receive_time_ns": {
+      "minimum": 0,
+      "title": "Receive Time Ns",
+      "type": "integer"
+    },
+    "robot_id": {
+      "anyOf": [
+        {
+          "maxLength": 40,
+          "minLength": 1,
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Robot Id"
+    },
+    "run_id": {
+      "maxLength": 40,
+      "minLength": 1,
+      "title": "Run Id",
+      "type": "string"
+    },
+    "schema_version": {
+      "default": "1.0.0",
+      "title": "Schema Version",
+      "type": "string"
+    },
+    "seq": {
+      "minimum": 0,
+      "title": "Seq",
+      "type": "integer"
+    },
+    "severity": {
+      "$ref": "#/$defs/EventSeverity",
+      "default": "info"
+    },
+    "sim_time_s": {
+      "default": 0.0,
+      "minimum": -1.0,
+      "title": "Sim Time S",
+      "type": "number"
+    },
+    "source": {
+      "maxLength": 64,
+      "title": "Source",
+      "type": "string"
+    },
+    "source_session": {
+      "default": "",
+      "maxLength": 40,
+      "title": "Source Session",
+      "type": "string"
+    },
+    "task_id": {
+      "anyOf": [
+        {
+          "maxLength": 40,
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Task Id"
+    },
+    "time_domain": {
+      "$ref": "#/$defs/TimeDomain"
+    },
+    "type": {
+      "maxLength": 64,
+      "minLength": 1,
+      "title": "Type",
+      "type": "string"
+    },
+    "zone_id": {
+      "anyOf": [
+        {
+          "maxLength": 40,
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Zone Id"
+    }
+  },
+  "required": [
+    "run_id",
+    "seq",
+    "source",
+    "event_time_ns",
+    "time_domain",
+    "receive_time_ns",
+    "receive_time_domain",
+    "type",
+    "category"
+  ],
+  "title": "DomainEvent",
+  "type": "object",
+  "x-niharamesh-version": "1.0.0"
+}

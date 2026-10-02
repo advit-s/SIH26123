@@ -1,0 +1,57 @@
+{
+  "$id": "https://niharamesh.local/schemas/MetricDefinition.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "description": "A metric is defined once and referenced everywhere.",
+  "properties": {
+    "description": {
+      "maxLength": 400,
+      "title": "Description",
+      "type": "string"
+    },
+    "direction": {
+      "default": "neutral",
+      "enum": [
+        "higher_is_better",
+        "lower_is_better",
+        "neutral"
+      ],
+      "title": "Direction",
+      "type": "string"
+    },
+    "headline": {
+      "default": false,
+      "title": "Headline",
+      "type": "boolean"
+    },
+    "key": {
+      "pattern": "^[a-z][a-z0-9_]{1,48}$",
+      "title": "Key",
+      "type": "string"
+    },
+    "label": {
+      "maxLength": 80,
+      "title": "Label",
+      "type": "string"
+    },
+    "unit": {
+      "maxLength": 16,
+      "title": "Unit",
+      "type": "string"
+    },
+    "zero_is_not_proof": {
+      "default": false,
+      "title": "Zero Is Not Proof",
+      "type": "boolean"
+    }
+  },
+  "required": [
+    "key",
+    "label",
+    "unit",
+    "description"
+  ],
+  "title": "MetricDefinition",
+  "type": "object",
+  "x-niharamesh-version": "1.0.0"
+}

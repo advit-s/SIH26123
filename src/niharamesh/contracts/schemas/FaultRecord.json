@@ -1,0 +1,78 @@
+{
+  "$defs": {
+    "FaultState": {
+      "enum": [
+        "scheduled",
+        "active",
+        "elapsed",
+        "cancelled",
+        "failed"
+      ],
+      "title": "FaultState",
+      "type": "string"
+    }
+  },
+  "$id": "https://niharamesh.local/schemas/FaultRecord.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "description": "A runtime observation of a fault's state. Manual injections become\ntimestamped run events; scheduled ones are part of the scenario snapshot.",
+  "properties": {
+    "digest": {
+      "default": "",
+      "maxLength": 64,
+      "title": "Digest",
+      "type": "string"
+    },
+    "ended_at_ns": {
+      "anyOf": [
+        {
+          "type": "integer"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Ended At Ns"
+    },
+    "fault_id": {
+      "maxLength": 96,
+      "minLength": 1,
+      "title": "Fault Id",
+      "type": "string"
+    },
+    "injected_by": {
+      "default": "",
+      "maxLength": 64,
+      "title": "Injected By",
+      "type": "string"
+    },
+    "manual": {
+      "default": false,
+      "title": "Manual",
+      "type": "boolean"
+    },
+    "note": {
+      "default": "",
+      "maxLength": 160,
+      "title": "Note",
+      "type": "string"
+    },
+    "started_at_ns": {
+      "minimum": 0,
+      "title": "Started At Ns",
+      "type": "integer"
+    },
+    "state": {
+      "$ref": "#/$defs/FaultState"
+    }
+  },
+  "required": [
+    "fault_id",
+    "state",
+    "started_at_ns"
+  ],
+  "title": "FaultRecord",
+  "type": "object",
+  "x-niharamesh-version": "1.0.0"
+}

@@ -1,0 +1,39 @@
+{
+  "$id": "https://niharamesh.local/schemas/StoppingBudget.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "description": "Derived stopping distance parameters.\n\nThese are *configured assumptions* for a low-speed simulation. They are not\ncertified real-world limits and are never presented as a safety guarantee.\n\nExample from the brief at v=0.4 m/s, t_r=0.30 s, a=0.8 m/s^2, margin=0.10 m:\nreaction 0.12 m + braking 0.10 m + margin 0.10 m = 0.32 m.",
+  "properties": {
+    "braking_decel_mps2": {
+      "default": 0.8,
+      "exclusiveMinimum": 0.0,
+      "maximum": 10.0,
+      "title": "Braking Decel Mps2",
+      "type": "number"
+    },
+    "extra_margin_m": {
+      "default": 0.1,
+      "maximum": 5.0,
+      "minimum": 0.0,
+      "title": "Extra Margin M",
+      "type": "number"
+    },
+    "max_speed_mps": {
+      "default": 0.4,
+      "exclusiveMinimum": 0.0,
+      "maximum": 2.0,
+      "title": "Max Speed Mps",
+      "type": "number"
+    },
+    "reaction_time_s": {
+      "default": 0.3,
+      "maximum": 5.0,
+      "minimum": 0.0,
+      "title": "Reaction Time S",
+      "type": "number"
+    }
+  },
+  "title": "StoppingBudget",
+  "type": "object",
+  "x-niharamesh-version": "1.0.0"
+}

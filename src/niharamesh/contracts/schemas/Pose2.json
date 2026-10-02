@@ -1,0 +1,34 @@
+{
+  "$id": "https://niharamesh.local/schemas/Pose2.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "description": "Planar pose in metres/radians. Distinct from a *measured* pose estimate.",
+  "properties": {
+    "theta": {
+      "maximum": 1000000000.0,
+      "minimum": -1000000000.0,
+      "title": "Theta",
+      "type": "number"
+    },
+    "x": {
+      "maximum": 1000000000.0,
+      "minimum": -1000000000.0,
+      "title": "X",
+      "type": "number"
+    },
+    "y": {
+      "maximum": 1000000000.0,
+      "minimum": -1000000000.0,
+      "title": "Y",
+      "type": "number"
+    }
+  },
+  "required": [
+    "x",
+    "y",
+    "theta"
+  ],
+  "title": "Pose2",
+  "type": "object",
+  "x-niharamesh-version": "1.0.0"
+}

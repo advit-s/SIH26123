@@ -1,0 +1,232 @@
+{
+  "$defs": {
+    "EnvironmentRecord": {
+      "additionalProperties": false,
+      "description": "What the run actually executed on. Recorded, never guessed.",
+      "properties": {
+        "accelerator": {
+          "default": "",
+          "title": "Accelerator",
+          "type": "string"
+        },
+        "cpu_count": {
+          "default": 0,
+          "title": "Cpu Count",
+          "type": "integer"
+        },
+        "cpu_model": {
+          "default": "",
+          "title": "Cpu Model",
+          "type": "string"
+        },
+        "docker": {
+          "default": false,
+          "title": "Docker",
+          "type": "boolean"
+        },
+        "machine": {
+          "title": "Machine",
+          "type": "string"
+        },
+        "os_name": {
+          "title": "Os Name",
+          "type": "string"
+        },
+        "os_version": {
+          "title": "Os Version",
+          "type": "string"
+        },
+        "python_version": {
+          "title": "Python Version",
+          "type": "string"
+        },
+        "wall_end_utc_ns": {
+          "default": 0,
+          "title": "Wall End Utc Ns",
+          "type": "integer"
+        },
+        "wall_start_utc_ns": {
+          "default": 0,
+          "title": "Wall Start Utc Ns",
+          "type": "integer"
+        }
+      },
+      "required": [
+        "os_name",
+        "os_version",
+        "machine",
+        "python_version"
+      ],
+      "title": "EnvironmentRecord",
+      "type": "object"
+    }
+  },
+  "$id": "https://niharamesh.local/schemas/RunManifest.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "description": "Everything needed to reproduce and audit one run.",
+  "properties": {
+    "assignment_policy": {
+      "title": "Assignment Policy",
+      "type": "string"
+    },
+    "comparison_mode": {
+      "title": "Comparison Mode",
+      "type": "string"
+    },
+    "config_digest": {
+      "maxLength": 64,
+      "minLength": 1,
+      "title": "Config Digest",
+      "type": "string"
+    },
+    "coordination_policy": {
+      "title": "Coordination Policy",
+      "type": "string"
+    },
+    "created_utc_ns": {
+      "minimum": 0,
+      "title": "Created Utc Ns",
+      "type": "integer"
+    },
+    "environment": {
+      "$ref": "#/$defs/EnvironmentRecord"
+    },
+    "expected_failure_reason": {
+      "default": "",
+      "maxLength": 200,
+      "title": "Expected Failure Reason",
+      "type": "string"
+    },
+    "expected_failure_scenario": {
+      "default": false,
+      "title": "Expected Failure Scenario",
+      "type": "boolean"
+    },
+    "fault_ids": {
+      "default": [],
+      "items": {
+        "maxLength": 96,
+        "minLength": 1,
+        "type": "string"
+      },
+      "title": "Fault Ids",
+      "type": "array"
+    },
+    "feature_flags": {
+      "additionalProperties": {
+        "type": "boolean"
+      },
+      "title": "Feature Flags",
+      "type": "object"
+    },
+    "map_digest": {
+      "maxLength": 64,
+      "minLength": 1,
+      "title": "Map Digest",
+      "type": "string"
+    },
+    "max_sim_time_s": {
+      "default": 900.0,
+      "exclusiveMinimum": 0.0,
+      "maximum": 86400.0,
+      "title": "Max Sim Time S",
+      "type": "number"
+    },
+    "mode": {
+      "enum": [
+        "deterministic",
+        "processes"
+      ],
+      "title": "Mode",
+      "type": "string"
+    },
+    "notes": {
+      "default": "",
+      "maxLength": 400,
+      "title": "Notes",
+      "type": "string"
+    },
+    "robot_ids": {
+      "default": [],
+      "items": {
+        "maxLength": 40,
+        "minLength": 1,
+        "type": "string"
+      },
+      "title": "Robot Ids",
+      "type": "array"
+    },
+    "routing_policy": {
+      "title": "Routing Policy",
+      "type": "string"
+    },
+    "run_id": {
+      "maxLength": 40,
+      "minLength": 1,
+      "title": "Run Id",
+      "type": "string"
+    },
+    "scenario_digest": {
+      "maxLength": 64,
+      "minLength": 1,
+      "title": "Scenario Digest",
+      "type": "string"
+    },
+    "scenario_revision": {
+      "minimum": 1,
+      "title": "Scenario Revision",
+      "type": "integer"
+    },
+    "schema_version": {
+      "default": "1.0.0",
+      "title": "Schema Version",
+      "type": "string"
+    },
+    "schema_version_id": {
+      "default": "1.0.0",
+      "title": "Schema Version Id",
+      "type": "string"
+    },
+    "seed": {
+      "maximum": 2147483647,
+      "minimum": 0,
+      "title": "Seed",
+      "type": "integer"
+    },
+    "source_dirty": {
+      "default": true,
+      "title": "Source Dirty",
+      "type": "boolean"
+    },
+    "source_revision": {
+      "maxLength": 64,
+      "title": "Source Revision",
+      "type": "string"
+    },
+    "task_count": {
+      "minimum": 0,
+      "title": "Task Count",
+      "type": "integer"
+    }
+  },
+  "required": [
+    "run_id",
+    "created_utc_ns",
+    "source_revision",
+    "scenario_digest",
+    "scenario_revision",
+    "map_digest",
+    "config_digest",
+    "mode",
+    "coordination_policy",
+    "assignment_policy",
+    "routing_policy",
+    "comparison_mode",
+    "seed",
+    "task_count"
+  ],
+  "title": "RunManifest",
+  "type": "object",
+  "x-niharamesh-version": "1.0.0"
+}

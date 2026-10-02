@@ -1,0 +1,17 @@
+{
+  "name": "@niharamesh/contracts",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Authoritative NĪHĀRAMESH JSON Schemas and TypeScript types generated from the Python domain models",
+  "exports": {
+    "./generated": "./generated/index.ts",
+    "./schemas/*": "./schemas/*"
+  },
+  "scripts": {
+    "generate": "node generate.mjs"
+  },
+  "dependencies": {
+    "json-schema-to-typescript": "15.0.3"
+  }
+}

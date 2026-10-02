@@ -1,0 +1,69 @@
+{
+  "$defs": {
+    "MembershipState": {
+      "description": "Controlled reconciliation state of the peer set.",
+      "enum": [
+        "frozen",
+        "reconciling",
+        "fenced"
+      ],
+      "title": "MembershipState",
+      "type": "string"
+    }
+  },
+  "$id": "https://niharamesh.local/schemas/Membership.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "description": "The immutable peer set for a run epoch, plus its reconciliation state.",
+  "properties": {
+    "canonical_order": {
+      "default": [],
+      "items": {
+        "maxLength": 40,
+        "minLength": 1,
+        "type": "string"
+      },
+      "title": "Canonical Order",
+      "type": "array"
+    },
+    "digest": {
+      "default": "",
+      "maxLength": 64,
+      "title": "Digest",
+      "type": "string"
+    },
+    "epoch": {
+      "maxLength": 40,
+      "minLength": 1,
+      "title": "Epoch",
+      "type": "string"
+    },
+    "members": {
+      "items": {
+        "maxLength": 40,
+        "minLength": 1,
+        "type": "string"
+      },
+      "title": "Members",
+      "type": "array"
+    },
+    "run_id": {
+      "maxLength": 40,
+      "minLength": 1,
+      "title": "Run Id",
+      "type": "string"
+    },
+    "state": {
+      "$ref": "#/$defs/MembershipState",
+      "default": "frozen"
+    }
+  },
+  "required": [
+    "run_id",
+    "epoch",
+    "members"
+  ],
+  "title": "Membership",
+  "type": "object",
+  "x-niharamesh-version": "1.0.0"
+}

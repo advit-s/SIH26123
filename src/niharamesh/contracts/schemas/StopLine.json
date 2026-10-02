@@ -1,0 +1,71 @@
+{
+  "$id": "https://niharamesh.local/schemas/StopLine.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "description": "Physical line a robot must not cross without the named authority.\n\n``zone_id`` names the authority required. This is the geometric anchor for\n\"stop-line violation\", which the evaluator checks independently.",
+  "properties": {
+    "approach": {
+      "default": "decreasing",
+      "pattern": "^(increasing|decreasing)$",
+      "title": "Approach",
+      "type": "string"
+    },
+    "end": {
+      "maxItems": 2,
+      "minItems": 2,
+      "prefixItems": [
+        {
+          "maximum": 1000000000.0,
+          "minimum": -1000000000.0,
+          "type": "number"
+        },
+        {
+          "maximum": 1000000000.0,
+          "minimum": -1000000000.0,
+          "type": "number"
+        }
+      ],
+      "title": "End",
+      "type": "array"
+    },
+    "id": {
+      "maxLength": 40,
+      "minLength": 1,
+      "title": "Id",
+      "type": "string"
+    },
+    "start": {
+      "maxItems": 2,
+      "minItems": 2,
+      "prefixItems": [
+        {
+          "maximum": 1000000000.0,
+          "minimum": -1000000000.0,
+          "type": "number"
+        },
+        {
+          "maximum": 1000000000.0,
+          "minimum": -1000000000.0,
+          "type": "number"
+        }
+      ],
+      "title": "Start",
+      "type": "array"
+    },
+    "zone_id": {
+      "maxLength": 40,
+      "minLength": 1,
+      "title": "Zone Id",
+      "type": "string"
+    }
+  },
+  "required": [
+    "id",
+    "zone_id",
+    "start",
+    "end"
+  ],
+  "title": "StopLine",
+  "type": "object",
+  "x-niharamesh-version": "1.0.0"
+}

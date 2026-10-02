@@ -1,0 +1,54 @@
+{
+  "$id": "https://niharamesh.local/schemas/FeatureFlags.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "description": "Ablation switches. Unsafe research variants are namespaced so they can\nnever be enabled by accident in a physical deployment.",
+  "properties": {
+    "blocked_aware_routing": {
+      "default": true,
+      "title": "Blocked Aware Routing",
+      "type": "boolean"
+    },
+    "disable_safety_gate": {
+      "default": false,
+      "title": "Disable Safety Gate",
+      "type": "boolean"
+    },
+    "fairness_aware_priority": {
+      "default": true,
+      "title": "Fairness Aware Priority",
+      "type": "boolean"
+    },
+    "task_reassignment": {
+      "default": true,
+      "title": "Task Reassignment",
+      "type": "boolean"
+    },
+    "temporal_planning": {
+      "default": false,
+      "title": "Temporal Planning",
+      "type": "boolean"
+    },
+    "timer_expiry_occupancy": {
+      "default": false,
+      "title": "Timer Expiry Occupancy",
+      "type": "boolean"
+    },
+    "unsafe_flags": {
+      "default": [],
+      "items": {
+        "type": "string"
+      },
+      "title": "Unsafe Flags",
+      "type": "array"
+    },
+    "unsafe_research_variant": {
+      "default": false,
+      "title": "Unsafe Research Variant",
+      "type": "boolean"
+    }
+  },
+  "title": "FeatureFlags",
+  "type": "object",
+  "x-niharamesh-version": "1.0.0"
+}

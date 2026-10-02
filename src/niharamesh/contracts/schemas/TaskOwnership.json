@@ -1,0 +1,94 @@
+{
+  "$defs": {
+    "TaskOwnershipState": {
+      "enum": [
+        "unowned",
+        "reserved",
+        "owned",
+        "released",
+        "recovery_required"
+      ],
+      "title": "TaskOwnershipState",
+      "type": "string"
+    }
+  },
+  "$id": "https://niharamesh.local/schemas/TaskOwnership.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "description": "Logical ownership. Monotonic version; stale transitions are refused.",
+  "properties": {
+    "allocation_round": {
+      "minimum": 0,
+      "title": "Allocation Round",
+      "type": "integer"
+    },
+    "awarded_at_ns": {
+      "minimum": 0,
+      "title": "Awarded At Ns",
+      "type": "integer"
+    },
+    "bid_set_digest": {
+      "default": "",
+      "maxLength": 64,
+      "title": "Bid Set Digest",
+      "type": "string"
+    },
+    "evidence": {
+      "default": "",
+      "maxLength": 120,
+      "title": "Evidence",
+      "type": "string"
+    },
+    "owner": {
+      "anyOf": [
+        {
+          "maxLength": 40,
+          "minLength": 1,
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Owner"
+    },
+    "owner_session": {
+      "anyOf": [
+        {
+          "maxLength": 40,
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Owner Session"
+    },
+    "ownership_version": {
+      "default": 1,
+      "minimum": 1,
+      "title": "Ownership Version",
+      "type": "integer"
+    },
+    "state": {
+      "$ref": "#/$defs/TaskOwnershipState",
+      "default": "unowned"
+    },
+    "task_id": {
+      "maxLength": 40,
+      "minLength": 1,
+      "title": "Task Id",
+      "type": "string"
+    }
+  },
+  "required": [
+    "task_id",
+    "allocation_round",
+    "awarded_at_ns"
+  ],
+  "title": "TaskOwnership",
+  "type": "object",
+  "x-niharamesh-version": "1.0.0"
+}

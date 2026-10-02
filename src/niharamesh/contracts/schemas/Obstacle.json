@@ -1,0 +1,89 @@
+{
+  "$defs": {
+    "ObstacleKind": {
+      "enum": [
+        "shelf",
+        "wall",
+        "pillar",
+        "temporary"
+      ],
+      "title": "ObstacleKind",
+      "type": "string"
+    },
+    "Pose2": {
+      "additionalProperties": false,
+      "description": "Planar pose in metres/radians. Distinct from a *measured* pose estimate.",
+      "properties": {
+        "theta": {
+          "maximum": 1000000000.0,
+          "minimum": -1000000000.0,
+          "title": "Theta",
+          "type": "number"
+        },
+        "x": {
+          "maximum": 1000000000.0,
+          "minimum": -1000000000.0,
+          "title": "X",
+          "type": "number"
+        },
+        "y": {
+          "maximum": 1000000000.0,
+          "minimum": -1000000000.0,
+          "title": "Y",
+          "type": "number"
+        }
+      },
+      "required": [
+        "x",
+        "y",
+        "theta"
+      ],
+      "title": "Pose2",
+      "type": "object"
+    }
+  },
+  "$id": "https://niharamesh.local/schemas/Obstacle.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "properties": {
+    "dynamic": {
+      "default": false,
+      "title": "Dynamic",
+      "type": "boolean"
+    },
+    "id": {
+      "maxLength": 40,
+      "minLength": 1,
+      "title": "Id",
+      "type": "string"
+    },
+    "kind": {
+      "$ref": "#/$defs/ObstacleKind",
+      "default": "shelf"
+    },
+    "length_m": {
+      "exclusiveMinimum": 0.0,
+      "maximum": 200.0,
+      "title": "Length M",
+      "type": "number"
+    },
+    "pose": {
+      "$ref": "#/$defs/Pose2"
+    },
+    "width_m": {
+      "exclusiveMinimum": 0.0,
+      "maximum": 200.0,
+      "title": "Width M",
+      "type": "number"
+    }
+  },
+  "required": [
+    "id",
+    "pose",
+    "length_m",
+    "width_m"
+  ],
+  "title": "Obstacle",
+  "type": "object",
+  "x-niharamesh-version": "1.0.0"
+}

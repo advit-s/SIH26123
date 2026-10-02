@@ -1,0 +1,127 @@
+{
+  "$defs": {
+    "BidComponent": {
+      "additionalProperties": false,
+      "description": "One declared term of a local bid. Shown verbatim in the UI.",
+      "properties": {
+        "name": {
+          "maxLength": 32,
+          "minLength": 1,
+          "title": "Name",
+          "type": "string"
+        },
+        "unit": {
+          "maxLength": 16,
+          "minLength": 1,
+          "title": "Unit",
+          "type": "string"
+        },
+        "value": {
+          "title": "Value",
+          "type": "number"
+        }
+      },
+      "required": [
+        "name",
+        "value",
+        "unit"
+      ],
+      "title": "BidComponent",
+      "type": "object"
+    }
+  },
+  "$id": "https://niharamesh.local/schemas/TaskBid.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "description": "Computed locally by one robot from its own available state only.",
+  "properties": {
+    "at_ns": {
+      "minimum": 0,
+      "title": "At Ns",
+      "type": "integer"
+    },
+    "components": {
+      "default": [],
+      "items": {
+        "$ref": "#/$defs/BidComponent"
+      },
+      "title": "Components",
+      "type": "array"
+    },
+    "epoch": {
+      "maxLength": 96,
+      "minLength": 1,
+      "title": "Epoch",
+      "type": "string"
+    },
+    "feasible": {
+      "default": true,
+      "title": "Feasible",
+      "type": "boolean"
+    },
+    "infeasible_reason": {
+      "default": "",
+      "maxLength": 96,
+      "title": "Infeasible Reason",
+      "type": "string"
+    },
+    "robot_id": {
+      "maxLength": 40,
+      "minLength": 1,
+      "title": "Robot Id",
+      "type": "string"
+    },
+    "robot_session": {
+      "maxLength": 40,
+      "title": "Robot Session",
+      "type": "string"
+    },
+    "round_id": {
+      "maxLength": 96,
+      "minLength": 1,
+      "title": "Round Id",
+      "type": "string"
+    },
+    "run_id": {
+      "maxLength": 96,
+      "minLength": 1,
+      "title": "Run Id",
+      "type": "string"
+    },
+    "schema_version": {
+      "default": "1.0.0",
+      "title": "Schema Version",
+      "type": "string"
+    },
+    "task_id": {
+      "maxLength": 40,
+      "minLength": 1,
+      "title": "Task Id",
+      "type": "string"
+    },
+    "tie_break": {
+      "default": 0,
+      "maximum": 1000000000,
+      "minimum": 0,
+      "title": "Tie Break",
+      "type": "integer"
+    },
+    "total_cost": {
+      "title": "Total Cost",
+      "type": "number"
+    }
+  },
+  "required": [
+    "run_id",
+    "epoch",
+    "task_id",
+    "robot_id",
+    "robot_session",
+    "round_id",
+    "total_cost",
+    "at_ns"
+  ],
+  "title": "TaskBid",
+  "type": "object",
+  "x-niharamesh-version": "1.0.0"
+}

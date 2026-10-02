@@ -1,0 +1,83 @@
+{
+  "$defs": {
+    "AssignmentPolicy": {
+      "enum": [
+        "none",
+        "local_auction"
+      ],
+      "title": "AssignmentPolicy",
+      "type": "string"
+    },
+    "ComparisonMode": {
+      "enum": [
+        "coordination_only",
+        "end_to_end"
+      ],
+      "title": "ComparisonMode",
+      "type": "string"
+    },
+    "CoordinationPolicy": {
+      "description": "The two policies that must sit behind identical interfaces.",
+      "enum": [
+        "stop_and_wait",
+        "canonical_sequential"
+      ],
+      "title": "CoordinationPolicy",
+      "type": "string"
+    },
+    "RoutingPolicy": {
+      "enum": [
+        "shortest",
+        "blocked_aware",
+        "temporal_sipp_approx"
+      ],
+      "title": "RoutingPolicy",
+      "type": "string"
+    }
+  },
+  "$id": "https://niharamesh.local/schemas/RunPolicy.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "properties": {
+    "assignment": {
+      "$ref": "#/$defs/AssignmentPolicy",
+      "default": "local_auction"
+    },
+    "comparison_mode": {
+      "$ref": "#/$defs/ComparisonMode",
+      "default": "coordination_only"
+    },
+    "coordination": {
+      "$ref": "#/$defs/CoordinationPolicy",
+      "default": "canonical_sequential"
+    },
+    "fault_seed": {
+      "default": 3,
+      "maximum": 2147483647,
+      "minimum": 0,
+      "title": "Fault Seed",
+      "type": "integer"
+    },
+    "planner_seed": {
+      "default": 1,
+      "maximum": 2147483647,
+      "minimum": 0,
+      "title": "Planner Seed",
+      "type": "integer"
+    },
+    "routing": {
+      "$ref": "#/$defs/RoutingPolicy",
+      "default": "blocked_aware"
+    },
+    "sensor_seed": {
+      "default": 2,
+      "maximum": 2147483647,
+      "minimum": 0,
+      "title": "Sensor Seed",
+      "type": "integer"
+    }
+  },
+  "title": "RunPolicy",
+  "type": "object",
+  "x-niharamesh-version": "1.0.0"
+}

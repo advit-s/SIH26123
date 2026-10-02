@@ -1,0 +1,62 @@
+{
+  "$id": "https://niharamesh.local/schemas/ZoneCancelAckBody.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "properties": {
+    "cancel_seq": {
+      "minimum": 1,
+      "title": "Cancel Seq",
+      "type": "integer"
+    },
+    "no_record": {
+      "default": false,
+      "title": "No Record",
+      "type": "boolean"
+    },
+    "request_version": {
+      "minimum": 1,
+      "title": "Request Version",
+      "type": "integer"
+    },
+    "requester": {
+      "maxLength": 40,
+      "minLength": 1,
+      "title": "Requester",
+      "type": "string"
+    },
+    "requester_session": {
+      "maxLength": 40,
+      "title": "Requester Session",
+      "type": "string"
+    },
+    "voter": {
+      "maxLength": 40,
+      "minLength": 1,
+      "title": "Voter",
+      "type": "string"
+    },
+    "voter_session": {
+      "maxLength": 40,
+      "title": "Voter Session",
+      "type": "string"
+    },
+    "zone_id": {
+      "maxLength": 40,
+      "minLength": 1,
+      "title": "Zone Id",
+      "type": "string"
+    }
+  },
+  "required": [
+    "zone_id",
+    "requester",
+    "requester_session",
+    "request_version",
+    "cancel_seq",
+    "voter",
+    "voter_session"
+  ],
+  "title": "ZoneCancelAckBody",
+  "type": "object",
+  "x-niharamesh-version": "1.0.0"
+}

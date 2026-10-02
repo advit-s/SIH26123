@@ -1,0 +1,66 @@
+{
+  "$schema": "https://opencode.ai/config.json",
+
+  // OpenCode v2 schema: `agents` (plural), `permissions` (plural), subagents declared
+  // with `"mode": "subagent"`. Verified against opencode v2.0.22.
+  // Model/provider/credential settings are intentionally NOT set here so the user's
+  // existing global configuration and credentials are preserved.
+
+  "permissions": [
+    { "action": "skill", "resource": "*", "effect": "allow" },
+    { "action": "shell", "resource": "git push *", "effect": "deny" },
+    { "action": "shell", "resource": "git reset --hard *", "effect": "deny" },
+    { "action": "shell", "resource": "git clean -*", "effect": "deny" },
+    { "action": "shell", "resource": "rm -rf *", "effect": "ask" },
+    { "action": "webfetch", "resource": "*", "effect": "allow" }
+  ],
+
+  "worktree": {
+    "directory": ".worktrees"
+  },
+
+  "watcher": {
+    "ignore": [
+      "**/.venv/**",
+      "**/node_modules/**",
+      "**/dist/**",
+      "**/var/**",
+      "**/.worktrees/**",
+      "**/.git/**"
+    ]
+  },
+
+  "formatter": true,
+
+  "agents": {
+    "protocol-reviewer": {
+      "description": "Independent reviewer for coordination protocol and safety logic. Read-only.",
+      "mode": "subagent",
+      "permissions": [
+        { "action": "edit", "resource": "*", "effect": "deny" },
+        { "action": "write", "resource": "*", "effect": "deny" },
+        { "action": "shell", "resource": "*", "effect": "allow" }
+      ]
+    },
+    "integration-reviewer": {
+      "description": "Final claim-audit and integration reviewer. Read-only.",
+      "mode": "subagent",
+      "permissions": [
+        { "action": "edit", "resource": "*", "effect": "deny" },
+        { "action": "write", "resource": "*", "effect": "deny" },
+        { "action": "shell", "resource": "*", "effect": "allow" }
+      ]
+    }
+  },
+
+  "commands": {
+    "protocol-audit": {
+      "description": "Audit the zone-coordination protocol and safety gate against docs/protocol",
+      "template": "Read docs/protocol/ZONE_PROTOCOL.md and src/niharamesh/coordination plus src/niharamesh/safety. Report concrete counterexamples for concurrency, crash recovery, stale messages and cancellation races. Name exact files and lines. Do not edit code."
+    },
+    "claim-audit": {
+      "description": "Audit product/technical claims against run evidence",
+      "template": "Read docs/STATUS.md, docs/KNOWN_LIMITATIONS.md, docs/evidence/CLAIM_EVIDENCE.md and the measured benchmark outputs under var/benchmarks. For each claim state whether code, test or measured artifact supports it, and flag anything unsupported."
+    }
+  }
+}

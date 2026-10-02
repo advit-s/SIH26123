@@ -1,0 +1,32 @@
+{
+  "$id": "https://niharamesh.local/schemas/PeerEndpoint.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "properties": {
+    "host": {
+      "default": "127.0.0.1",
+      "maxLength": 128,
+      "title": "Host",
+      "type": "string"
+    },
+    "port": {
+      "maximum": 65535,
+      "minimum": 1,
+      "title": "Port",
+      "type": "integer"
+    },
+    "robot_id": {
+      "maxLength": 40,
+      "minLength": 1,
+      "title": "Robot Id",
+      "type": "string"
+    }
+  },
+  "required": [
+    "robot_id",
+    "port"
+  ],
+  "title": "PeerEndpoint",
+  "type": "object",
+  "x-niharamesh-version": "1.0.0"
+}

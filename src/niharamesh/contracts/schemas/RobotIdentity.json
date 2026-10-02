@@ -1,0 +1,124 @@
+{
+  "$defs": {
+    "Capability": {
+      "enum": [
+        "carry_payload",
+        "tow",
+        "spot_fill",
+        "dock",
+        "clean"
+      ],
+      "title": "Capability",
+      "type": "string"
+    },
+    "Footprint": {
+      "additionalProperties": false,
+      "description": "Finite robot geometry, plus payload overhang when carrying.\n\n``length_m``/``width_m`` describe the chassis. ``payload_length_m`` and\n``payload_width_m`` describe the largest carried load. ``payload_offset_m``\nis the distance from the chassis centre to the payload centre along the\nchassis ``+x`` axis (positive = front overhang).",
+      "properties": {
+        "length_m": {
+          "exclusiveMinimum": 0.0,
+          "maximum": 5.0,
+          "title": "Length M",
+          "type": "number"
+        },
+        "payload_length_m": {
+          "default": 0.0,
+          "maximum": 5.0,
+          "minimum": 0.0,
+          "title": "Payload Length M",
+          "type": "number"
+        },
+        "payload_offset_m": {
+          "default": 0.0,
+          "maximum": 1.0,
+          "minimum": -1.0,
+          "title": "Payload Offset M",
+          "type": "number"
+        },
+        "payload_width_m": {
+          "default": 0.0,
+          "maximum": 5.0,
+          "minimum": 0.0,
+          "title": "Payload Width M",
+          "type": "number"
+        },
+        "turning_radius_m": {
+          "default": 0.35,
+          "exclusiveMinimum": 0.0,
+          "maximum": 5.0,
+          "title": "Turning Radius M",
+          "type": "number"
+        },
+        "width_m": {
+          "exclusiveMinimum": 0.0,
+          "maximum": 5.0,
+          "title": "Width M",
+          "type": "number"
+        }
+      },
+      "required": [
+        "length_m",
+        "width_m"
+      ],
+      "title": "Footprint",
+      "type": "object"
+    }
+  },
+  "$id": "https://niharamesh.local/schemas/RobotIdentity.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "description": "Persistent identity of a physical robot.",
+  "properties": {
+    "capabilities": {
+      "default": [
+        "carry_payload"
+      ],
+      "items": {
+        "$ref": "#/$defs/Capability"
+      },
+      "title": "Capabilities",
+      "type": "array"
+    },
+    "footprint": {
+      "$ref": "#/$defs/Footprint"
+    },
+    "max_angular_radps": {
+      "default": 1.0,
+      "exclusiveMinimum": 0.0,
+      "maximum": 3.0,
+      "title": "Max Angular Radps",
+      "type": "number"
+    },
+    "max_linear_mps": {
+      "default": 0.4,
+      "exclusiveMinimum": 0.0,
+      "maximum": 2.0,
+      "title": "Max Linear Mps",
+      "type": "number"
+    },
+    "model": {
+      "default": "niharamesh-amr",
+      "maxLength": 64,
+      "title": "Model",
+      "type": "string"
+    },
+    "robot_id": {
+      "maxLength": 40,
+      "minLength": 1,
+      "title": "Robot Id",
+      "type": "string"
+    },
+    "schema_version": {
+      "default": "1.0.0",
+      "title": "Schema Version",
+      "type": "string"
+    }
+  },
+  "required": [
+    "robot_id",
+    "footprint"
+  ],
+  "title": "RobotIdentity",
+  "type": "object",
+  "x-niharamesh-version": "1.0.0"
+}

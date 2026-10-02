@@ -1,0 +1,83 @@
+{
+  "$defs": {
+    "Pose2": {
+      "additionalProperties": false,
+      "description": "Planar pose in metres/radians. Distinct from a *measured* pose estimate.",
+      "properties": {
+        "theta": {
+          "maximum": 1000000000.0,
+          "minimum": -1000000000.0,
+          "title": "Theta",
+          "type": "number"
+        },
+        "x": {
+          "maximum": 1000000000.0,
+          "minimum": -1000000000.0,
+          "title": "X",
+          "type": "number"
+        },
+        "y": {
+          "maximum": 1000000000.0,
+          "minimum": -1000000000.0,
+          "title": "Y",
+          "type": "number"
+        }
+      },
+      "required": [
+        "x",
+        "y",
+        "theta"
+      ],
+      "title": "Pose2",
+      "type": "object"
+    },
+    "StationKind": {
+      "enum": [
+        "pickup",
+        "drop",
+        "charge"
+      ],
+      "title": "StationKind",
+      "type": "string"
+    }
+  },
+  "$id": "https://niharamesh.local/schemas/Station.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "properties": {
+    "capacity": {
+      "default": 1,
+      "maximum": 64,
+      "minimum": 1,
+      "title": "Capacity",
+      "type": "integer"
+    },
+    "id": {
+      "maxLength": 40,
+      "minLength": 1,
+      "title": "Id",
+      "type": "string"
+    },
+    "kind": {
+      "$ref": "#/$defs/StationKind"
+    },
+    "pose": {
+      "$ref": "#/$defs/Pose2"
+    },
+    "service_time_s": {
+      "default": 4.0,
+      "maximum": 600.0,
+      "minimum": 0.0,
+      "title": "Service Time S",
+      "type": "number"
+    }
+  },
+  "required": [
+    "id",
+    "kind",
+    "pose"
+  ],
+  "title": "Station",
+  "type": "object",
+  "x-niharamesh-version": "1.0.0"
+}

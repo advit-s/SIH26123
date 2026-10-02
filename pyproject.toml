@@ -1,0 +1,88 @@
+[project]
+name = "niharamesh"
+version = "0.1.0"
+description = "NĪHĀRAMESH - freshness-aware distributed fleet coordination laboratory for warehouse AMRs"
+readme = "README.md"
+requires-python = ">=3.12,<3.13"
+license = { text = "MIT" }
+authors = [{ name = "NihāraNetra" }]
+
+dependencies = [
+  "pydantic>=2.9,<3",
+  "fastapi>=0.115,<1",
+  "uvicorn[standard]>=0.32,<1",
+  "numpy>=2.1,<3",
+  "jsonschema>=4.23,<5",
+]
+
+[project.scripts]
+nihara = "niharamesh.cli.main:main"
+
+[project.optional-dependencies]
+dev = [
+  "pytest>=8.3,<9",
+  "pytest-asyncio>=0.24,<1",
+  "pytest-timeout>=2.3,<3",
+  "hypothesis>=6.112,<7",
+  "ruff>=0.7,<1",
+  "mypy>=1.13,<2",
+]
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/niharamesh"]
+
+[tool.uv.workspace]
+members = []
+
+[tool.pytest.ini_options]
+minversion = "8.0"
+testpaths = ["tests"]
+pythonpath = ["src"]
+addopts = "-ra --strict-markers --timeout=180"
+markers = [
+  "slow: long-running benchmarks or soak tests",
+  "process: requires spawning real OS processes",
+  "network: binds real localhost sockets",
+  "browser: Playwright browser workflows",
+]
+asyncio_mode = "auto"
+asyncio_default_fixture_loop_scope = "function"
+filterwarnings = ["error::DeprecationWarning:niharamesh.*"]
+
+[tool.ruff]
+line-length = 100
+target-version = "py312"
+src = ["src", "tests"]
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP", "B", "SIM", "RUF", "ASYNC", "S", "C4", "PIE", "RSE"]
+ignore = [
+  "S101",  # asserts are used deliberately in geometry/evaluator code
+  "B008",
+  "RUF001", # ambiguous unicode in prose strings is intentional (NĪHĀRAMESH)
+  "RUF002",
+  "RUF003",
+]
+
+[tool.ruff.lint.per-file-ignores]
+"tests/**" = ["S", "B011"]
+"scripts/**" = ["S"]
+
+[tool.ruff.lint.flake8-tidy-imports]
+ban-relative-imports = "all"
+
+[tool.mypy]
+python_version = "3.12"
+files = ["src/niharamesh"]
+strict = true
+warn_unreachable = true
+disallow_any_generics = true
+plugins = ["pydantic.mypy"]
+
+[[tool.mypy.overrides]]
+module = "niharamesh.simulator.*"
+disallow_untyped_defs = false

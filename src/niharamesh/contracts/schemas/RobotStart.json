@@ -1,0 +1,83 @@
+{
+  "$defs": {
+    "Pose2": {
+      "additionalProperties": false,
+      "description": "Planar pose in metres/radians. Distinct from a *measured* pose estimate.",
+      "properties": {
+        "theta": {
+          "maximum": 1000000000.0,
+          "minimum": -1000000000.0,
+          "title": "Theta",
+          "type": "number"
+        },
+        "x": {
+          "maximum": 1000000000.0,
+          "minimum": -1000000000.0,
+          "title": "X",
+          "type": "number"
+        },
+        "y": {
+          "maximum": 1000000000.0,
+          "minimum": -1000000000.0,
+          "title": "Y",
+          "type": "number"
+        }
+      },
+      "required": [
+        "x",
+        "y",
+        "theta"
+      ],
+      "title": "Pose2",
+      "type": "object"
+    }
+  },
+  "$id": "https://niharamesh.local/schemas/RobotStart.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "properties": {
+    "assigned_task_id": {
+      "anyOf": [
+        {
+          "maxLength": 40,
+          "minLength": 1,
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Assigned Task Id"
+    },
+    "holding_task_id": {
+      "anyOf": [
+        {
+          "maxLength": 40,
+          "minLength": 1,
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Holding Task Id"
+    },
+    "pose": {
+      "$ref": "#/$defs/Pose2"
+    },
+    "robot_id": {
+      "maxLength": 40,
+      "title": "Robot Id",
+      "type": "string"
+    }
+  },
+  "required": [
+    "robot_id",
+    "pose"
+  ],
+  "title": "RobotStart",
+  "type": "object",
+  "x-niharamesh-version": "1.0.0"
+}

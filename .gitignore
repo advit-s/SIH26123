@@ -1,0 +1,65 @@
+# ---- Node / pnpm ----
+node_modules/
+.pnpm-store/
+.next/
+.turbo/
+*.tsbuildinfo
+apps/web/dist/
+apps/web/test-results/
+apps/web/playwright-report/
+apps/web/blob-report/
+apps/web/.playwright/
+apps/web/coverage/
+apps/web/.vite/
+
+# ---- Python / uv ----
+.venv/
+venv/
+__pycache__/
+*.py[cod]
+*.egg-info/
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+.hypothesis/
+htmlcov/
+.coverage
+.coverage.*
+
+# ---- Runtime data (generated, regenerable) ----
+var/
+!var/.gitkeep
+runs/
+benchmarks/out/
+evidence/traces/
+evidence/screenshots/
+*.sqlite
+*.sqlite3
+*.db
+*.db-wal
+*.db-shm
+
+# ---- Secrets / local machine config ----
+.env
+.env.local
+.env.*.local
+!.env.example
+*.pem
+*.key
+*.crt
+*.keystore
+certs/
+
+# ---- OS / editor ----
+Thumbs.db
+desktop.ini
+.DS_Store
+.idea/
+.vscode/*
+!.vscode/extensions.json
+*.swp
+
+# ---- Installer caches ----
+.skills-cache/
+skills-lock.json.tmp
+.agents/**/node_modules/

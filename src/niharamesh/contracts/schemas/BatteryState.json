@@ -1,0 +1,69 @@
+{
+  "$defs": {
+    "BatterySource": {
+      "description": "Provenance of a battery number. Never guessed.",
+      "enum": [
+        "measured",
+        "simulated",
+        "estimated",
+        "unavailable"
+      ],
+      "title": "BatterySource",
+      "type": "string"
+    }
+  },
+  "$id": "https://niharamesh.local/schemas/BatteryState.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "properties": {
+    "drain_model": {
+      "anyOf": [
+        {
+          "maxLength": 80,
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Drain Model"
+    },
+    "estimated_range_m": {
+      "anyOf": [
+        {
+          "minimum": 0.0,
+          "type": "number"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Estimated Range M"
+    },
+    "fraction": {
+      "anyOf": [
+        {
+          "maximum": 1.05,
+          "minimum": -0.05,
+          "type": "number"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Fraction"
+    },
+    "source": {
+      "$ref": "#/$defs/BatterySource"
+    }
+  },
+  "required": [
+    "source"
+  ],
+  "title": "BatteryState",
+  "type": "object",
+  "x-niharamesh-version": "1.0.0"
+}

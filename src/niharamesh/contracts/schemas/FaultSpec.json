@@ -1,0 +1,202 @@
+{
+  "$defs": {
+    "FaultChannel": {
+      "enum": [
+        "coordination",
+        "telemetry"
+      ],
+      "title": "FaultChannel",
+      "type": "string"
+    },
+    "FaultKind": {
+      "enum": [
+        "delay",
+        "loss",
+        "duplicate",
+        "reorder",
+        "partition",
+        "clock_skew",
+        "obstacle_insert",
+        "obstacle_remove",
+        "sensor_stale",
+        "sensor_dropout",
+        "control_overload",
+        "process_crash",
+        "process_restart",
+        "journal_corrupt"
+      ],
+      "title": "FaultKind",
+      "type": "string"
+    },
+    "FaultTarget": {
+      "additionalProperties": false,
+      "description": "Explicit sender/receiver targeting. A fault with no target is invalid -\nthe brief requires directed fault injection, not a global toggle.",
+      "properties": {
+        "channel": {
+          "$ref": "#/$defs/FaultChannel"
+        },
+        "kind": {
+          "$ref": "#/$defs/FaultKind"
+        },
+        "message_kind": {
+          "anyOf": [
+            {
+              "maxLength": 32,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Message Kind"
+        },
+        "position": {
+          "anyOf": [
+            {
+              "maxItems": 2,
+              "minItems": 2,
+              "prefixItems": [
+                {
+                  "type": "number"
+                },
+                {
+                  "type": "number"
+                }
+              ],
+              "type": "array"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Position"
+        },
+        "receiver": {
+          "anyOf": [
+            {
+              "maxLength": 40,
+              "minLength": 1,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Receiver"
+        },
+        "robot": {
+          "anyOf": [
+            {
+              "maxLength": 40,
+              "minLength": 1,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Robot"
+        },
+        "sender": {
+          "anyOf": [
+            {
+              "maxLength": 40,
+              "minLength": 1,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Sender"
+        },
+        "zone_id": {
+          "anyOf": [
+            {
+              "maxLength": 40,
+              "minLength": 1,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Zone Id"
+        }
+      },
+      "required": [
+        "channel",
+        "kind"
+      ],
+      "title": "FaultTarget",
+      "type": "object"
+    }
+  },
+  "$id": "https://niharamesh.local/schemas/FaultSpec.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "properties": {
+    "duration_s": {
+      "default": 1.0,
+      "maximum": 86400.0,
+      "minimum": 0.0,
+      "title": "Duration S",
+      "type": "number"
+    },
+    "expected_invariant": {
+      "maxLength": 200,
+      "minLength": 1,
+      "title": "Expected Invariant",
+      "type": "string"
+    },
+    "fault_id": {
+      "maxLength": 96,
+      "minLength": 1,
+      "title": "Fault Id",
+      "type": "string"
+    },
+    "params": {
+      "additionalProperties": {
+        "type": "number"
+      },
+      "title": "Params",
+      "type": "object"
+    },
+    "schema_version": {
+      "default": "1.0.0",
+      "title": "Schema Version",
+      "type": "string"
+    },
+    "seed": {
+      "default": 0,
+      "maximum": 2147483647,
+      "minimum": 0,
+      "title": "Seed",
+      "type": "integer"
+    },
+    "start_at_s": {
+      "default": 0.0,
+      "maximum": 86400.0,
+      "minimum": 0.0,
+      "title": "Start At S",
+      "type": "number"
+    },
+    "target": {
+      "$ref": "#/$defs/FaultTarget"
+    }
+  },
+  "required": [
+    "fault_id",
+    "target",
+    "expected_invariant"
+  ],
+  "title": "FaultSpec",
+  "type": "object",
+  "x-niharamesh-version": "1.0.0"
+}

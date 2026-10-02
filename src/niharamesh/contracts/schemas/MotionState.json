@@ -1,0 +1,105 @@
+{
+  "$defs": {
+    "ActuatorState": {
+      "description": "Physical state of the actuator chain. Never inferred from a flag.",
+      "enum": [
+        "enabled",
+        "disabled",
+        "braking",
+        "watchdog_braking",
+        "estop",
+        "fault"
+      ],
+      "title": "ActuatorState",
+      "type": "string"
+    },
+    "StopReason": {
+      "description": "Why motion is or is not happening. Every stop is attributed.",
+      "enum": [
+        "none",
+        "command_expired",
+        "safety_gate_veto",
+        "zone_authority_missing",
+        "freshness_uncertain",
+        "obstacle_in_path",
+        "stale_localisation",
+        "control_loop_stalled",
+        "operator_request",
+        "scheduled_stop",
+        "workload_complete",
+        "crash_recovery",
+        "actuator_fault"
+      ],
+      "title": "StopReason",
+      "type": "string"
+    }
+  },
+  "$id": "https://niharamesh.local/schemas/MotionState.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "description": "Observed motion, the command that was asked for, and the actuator story.",
+  "properties": {
+    "actuation_enabled": {
+      "default": false,
+      "title": "Actuation Enabled",
+      "type": "boolean"
+    },
+    "actuator": {
+      "$ref": "#/$defs/ActuatorState",
+      "default": "disabled"
+    },
+    "angular_velocity_radps": {
+      "default": 0.0,
+      "maximum": 1000000000.0,
+      "minimum": -1000000000.0,
+      "title": "Angular Velocity Radps",
+      "type": "number"
+    },
+    "command_expires_at_ns": {
+      "anyOf": [
+        {
+          "type": "integer"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Command Expires At Ns"
+    },
+    "command_seq": {
+      "default": 0,
+      "minimum": 0,
+      "title": "Command Seq",
+      "type": "integer"
+    },
+    "commanded_angular_radps": {
+      "default": 0.0,
+      "maximum": 1000000000.0,
+      "minimum": -1000000000.0,
+      "title": "Commanded Angular Radps",
+      "type": "number"
+    },
+    "commanded_linear_mps": {
+      "default": 0.0,
+      "maximum": 1000000000.0,
+      "minimum": -1000000000.0,
+      "title": "Commanded Linear Mps",
+      "type": "number"
+    },
+    "linear_velocity_mps": {
+      "default": 0.0,
+      "maximum": 1000000000.0,
+      "minimum": -1000000000.0,
+      "title": "Linear Velocity Mps",
+      "type": "number"
+    },
+    "stop_reason": {
+      "$ref": "#/$defs/StopReason",
+      "default": "none"
+    }
+  },
+  "title": "MotionState",
+  "type": "object",
+  "x-niharamesh-version": "1.0.0"
+}

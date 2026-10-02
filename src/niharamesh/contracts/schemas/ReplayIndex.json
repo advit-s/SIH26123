@@ -1,0 +1,138 @@
+{
+  "$defs": {
+    "EventCategory": {
+      "enum": [
+        "authority",
+        "evaluation",
+        "task",
+        "planning",
+        "safety",
+        "fault",
+        "command",
+        "lifecycle",
+        "telemetry"
+      ],
+      "title": "EventCategory",
+      "type": "string"
+    },
+    "RecordingGap": {
+      "additionalProperties": false,
+      "description": "An explicit, visible hole in durable evidence.\n\nA run with an unresolved gap in a durable category is marked incomplete and\nits affected metrics are excluded from claims requiring complete evidence.",
+      "properties": {
+        "category": {
+          "$ref": "#/$defs/EventCategory"
+        },
+        "cause": {
+          "maxLength": 160,
+          "title": "Cause",
+          "type": "string"
+        },
+        "from_seq": {
+          "minimum": 0,
+          "title": "From Seq",
+          "type": "integer"
+        },
+        "recovered": {
+          "default": false,
+          "title": "Recovered",
+          "type": "boolean"
+        },
+        "run_id": {
+          "maxLength": 40,
+          "minLength": 1,
+          "title": "Run Id",
+          "type": "string"
+        },
+        "sim_time_from_s": {
+          "title": "Sim Time From S",
+          "type": "number"
+        },
+        "sim_time_to_s": {
+          "title": "Sim Time To S",
+          "type": "number"
+        },
+        "to_seq": {
+          "minimum": 0,
+          "title": "To Seq",
+          "type": "integer"
+        }
+      },
+      "required": [
+        "run_id",
+        "category",
+        "from_seq",
+        "to_seq",
+        "sim_time_from_s",
+        "sim_time_to_s",
+        "cause"
+      ],
+      "title": "RecordingGap",
+      "type": "object"
+    }
+  },
+  "$id": "https://niharamesh.local/schemas/ReplayIndex.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "description": "Rebuilds the world at any timestamp. Never fabricates future state.",
+  "properties": {
+    "categories": {
+      "additionalProperties": {
+        "type": "integer"
+      },
+      "title": "Categories",
+      "type": "object"
+    },
+    "complete": {
+      "default": true,
+      "title": "Complete",
+      "type": "boolean"
+    },
+    "event_count": {
+      "minimum": 0,
+      "title": "Event Count",
+      "type": "integer"
+    },
+    "events_path": {
+      "title": "Events Path",
+      "type": "string"
+    },
+    "first_sim_time_s": {
+      "title": "First Sim Time S",
+      "type": "number"
+    },
+    "gaps": {
+      "default": [],
+      "items": {
+        "$ref": "#/$defs/RecordingGap"
+      },
+      "title": "Gaps",
+      "type": "array"
+    },
+    "last_sim_time_s": {
+      "title": "Last Sim Time S",
+      "type": "number"
+    },
+    "notes": {
+      "default": "",
+      "maxLength": 200,
+      "title": "Notes",
+      "type": "string"
+    },
+    "run_id": {
+      "maxLength": 40,
+      "minLength": 1,
+      "title": "Run Id",
+      "type": "string"
+    }
+  },
+  "required": [
+    "run_id",
+    "events_path",
+    "event_count",
+    "first_sim_time_s",
+    "last_sim_time_s"
+  ],
+  "title": "ReplayIndex",
+  "type": "object",
+  "x-niharamesh-version": "1.0.0"
+}

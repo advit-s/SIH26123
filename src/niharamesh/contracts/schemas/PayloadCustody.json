@@ -1,0 +1,93 @@
+{
+  "$defs": {
+    "CustodyState": {
+      "enum": [
+        "at_station",
+        "attached",
+        "delivered",
+        "awaiting_recovery"
+      ],
+      "title": "CustodyState",
+      "type": "string"
+    }
+  },
+  "$id": "https://niharamesh.local/schemas/PayloadCustody.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "description": "Physical possession. Never inferred from ownership.",
+  "properties": {
+    "custody_version": {
+      "default": 1,
+      "minimum": 1,
+      "title": "Custody Version",
+      "type": "integer"
+    },
+    "delivered_at_ns": {
+      "anyOf": [
+        {
+          "type": "integer"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Delivered At Ns"
+    },
+    "holder": {
+      "anyOf": [
+        {
+          "maxLength": 40,
+          "minLength": 1,
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Holder"
+    },
+    "holder_session": {
+      "anyOf": [
+        {
+          "maxLength": 40,
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Holder Session"
+    },
+    "picked_up_at_ns": {
+      "anyOf": [
+        {
+          "type": "integer"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Picked Up At Ns"
+    },
+    "state": {
+      "$ref": "#/$defs/CustodyState",
+      "default": "at_station"
+    },
+    "task_id": {
+      "maxLength": 40,
+      "minLength": 1,
+      "title": "Task Id",
+      "type": "string"
+    }
+  },
+  "required": [
+    "task_id"
+  ],
+  "title": "PayloadCustody",
+  "type": "object",
+  "x-niharamesh-version": "1.0.0"
+}

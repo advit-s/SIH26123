@@ -1,0 +1,64 @@
+{
+  "$defs": {
+    "Pose2": {
+      "additionalProperties": false,
+      "description": "Planar pose in metres/radians. Distinct from a *measured* pose estimate.",
+      "properties": {
+        "theta": {
+          "maximum": 1000000000.0,
+          "minimum": -1000000000.0,
+          "title": "Theta",
+          "type": "number"
+        },
+        "x": {
+          "maximum": 1000000000.0,
+          "minimum": -1000000000.0,
+          "title": "X",
+          "type": "number"
+        },
+        "y": {
+          "maximum": 1000000000.0,
+          "minimum": -1000000000.0,
+          "title": "Y",
+          "type": "number"
+        }
+      },
+      "required": [
+        "x",
+        "y",
+        "theta"
+      ],
+      "title": "Pose2",
+      "type": "object"
+    }
+  },
+  "$id": "https://niharamesh.local/schemas/Berth.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "description": "A safe resting place: a place where a stopped robot is *not* holding\nanother robot's zone authority.",
+  "properties": {
+    "capacity": {
+      "default": 1,
+      "maximum": 16,
+      "minimum": 1,
+      "title": "Capacity",
+      "type": "integer"
+    },
+    "id": {
+      "maxLength": 40,
+      "minLength": 1,
+      "title": "Id",
+      "type": "string"
+    },
+    "pose": {
+      "$ref": "#/$defs/Pose2"
+    }
+  },
+  "required": [
+    "id",
+    "pose"
+  ],
+  "title": "Berth",
+  "type": "object",
+  "x-niharamesh-version": "1.0.0"
+}

@@ -1,0 +1,65 @@
+{
+  "$id": "https://niharamesh.local/schemas/ZoneOccupyBody.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "description": "Owner declares physical entry into the zone.",
+  "properties": {
+    "epoch": {
+      "maxLength": 96,
+      "minLength": 1,
+      "title": "Epoch",
+      "type": "string"
+    },
+    "grant_id": {
+      "maxLength": 24,
+      "title": "Grant Id",
+      "type": "string"
+    },
+    "occupancy_seq": {
+      "minimum": 1,
+      "title": "Occupancy Seq",
+      "type": "integer"
+    },
+    "request_version": {
+      "minimum": 1,
+      "title": "Request Version",
+      "type": "integer"
+    },
+    "requester": {
+      "maxLength": 40,
+      "minLength": 1,
+      "title": "Requester",
+      "type": "string"
+    },
+    "requester_session": {
+      "maxLength": 40,
+      "title": "Requester Session",
+      "type": "string"
+    },
+    "run_id": {
+      "maxLength": 96,
+      "minLength": 1,
+      "title": "Run Id",
+      "type": "string"
+    },
+    "zone_id": {
+      "maxLength": 40,
+      "minLength": 1,
+      "title": "Zone Id",
+      "type": "string"
+    }
+  },
+  "required": [
+    "run_id",
+    "epoch",
+    "zone_id",
+    "requester",
+    "requester_session",
+    "request_version",
+    "grant_id",
+    "occupancy_seq"
+  ],
+  "title": "ZoneOccupyBody",
+  "type": "object",
+  "x-niharamesh-version": "1.0.0"
+}

@@ -1,0 +1,63 @@
+{
+  "$defs": {
+    "MetricAvailability": {
+      "enum": [
+        "measured",
+        "unavailable",
+        "excluded"
+      ],
+      "title": "MetricAvailability",
+      "type": "string"
+    }
+  },
+  "$id": "https://niharamesh.local/schemas/MetricValue.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "properties": {
+    "availability": {
+      "$ref": "#/$defs/MetricAvailability"
+    },
+    "key": {
+      "title": "Key",
+      "type": "string"
+    },
+    "note": {
+      "default": "",
+      "maxLength": 200,
+      "title": "Note",
+      "type": "string"
+    },
+    "sample_count": {
+      "anyOf": [
+        {
+          "minimum": 0,
+          "type": "integer"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Sample Count"
+    },
+    "value": {
+      "anyOf": [
+        {
+          "type": "number"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Value"
+    }
+  },
+  "required": [
+    "key",
+    "availability"
+  ],
+  "title": "MetricValue",
+  "type": "object",
+  "x-niharamesh-version": "1.0.0"
+}

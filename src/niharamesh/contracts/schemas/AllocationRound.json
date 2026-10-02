@@ -1,0 +1,68 @@
+{
+  "$id": "https://niharamesh.local/schemas/AllocationRound.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "description": "Immutable round identity. Serialising rounds is what prevents a robot\nwinning two auctions against the same availability.",
+  "properties": {
+    "epoch": {
+      "maxLength": 96,
+      "minLength": 1,
+      "title": "Epoch",
+      "type": "string"
+    },
+    "index": {
+      "minimum": 0,
+      "title": "Index",
+      "type": "integer"
+    },
+    "opened_at_ns": {
+      "minimum": 0,
+      "title": "Opened At Ns",
+      "type": "integer"
+    },
+    "released_task_ids": {
+      "default": [],
+      "items": {
+        "maxLength": 40,
+        "minLength": 1,
+        "type": "string"
+      },
+      "title": "Released Task Ids",
+      "type": "array"
+    },
+    "reserve_capacity_on_timeout": {
+      "default": true,
+      "title": "Reserve Capacity On Timeout",
+      "type": "boolean"
+    },
+    "round_id": {
+      "maxLength": 96,
+      "minLength": 1,
+      "title": "Round Id",
+      "type": "string"
+    },
+    "run_id": {
+      "maxLength": 96,
+      "minLength": 1,
+      "title": "Run Id",
+      "type": "string"
+    },
+    "snapshot_digest": {
+      "maxLength": 64,
+      "minLength": 1,
+      "title": "Snapshot Digest",
+      "type": "string"
+    }
+  },
+  "required": [
+    "round_id",
+    "run_id",
+    "epoch",
+    "index",
+    "snapshot_digest",
+    "opened_at_ns"
+  ],
+  "title": "AllocationRound",
+  "type": "object",
+  "x-niharamesh-version": "1.0.0"
+}

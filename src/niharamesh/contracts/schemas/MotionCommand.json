@@ -1,0 +1,73 @@
+{
+  "$defs": {
+    "TimeDomain": {
+      "description": "Named clock domains. Values are never mixed across domains.\n\n``LOGICAL``\n    Injected logical simulation time. Freezes when the harness pauses and\n    advances under acceleration. Used by the deterministic mode.\n``SIM_SECONDS``\n    Simulation seconds elapsed since the declared common run start. Derived\n    from ``LOGICAL``; identical semantics, different unit framing.\n``MONOTONIC``\n    The agent's own ``time.monotonic_ns()``. Never comparable across\n    processes without an explicit measured offset *and* uncertainty.\n``DISPLAY_UTC``\n    Wall-clock UTC for human display only. Never used for expiry.",
+      "enum": [
+        "logical",
+        "sim_seconds",
+        "monotonic",
+        "display_utc"
+      ],
+      "title": "TimeDomain",
+      "type": "string"
+    }
+  },
+  "$id": "https://niharamesh.local/schemas/MotionCommand.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "description": "The only thing an agent may hand to the world.\n\n``expires_at_ns`` is in the agent's declared ``time_domain``; the world\ncompares it against the clock of that same domain. Expiry causes *braking at\nthe configured deceleration*, never an instantaneous stop.",
+  "properties": {
+    "angular_radps": {
+      "maximum": 3.0,
+      "minimum": -3.0,
+      "title": "Angular Radps",
+      "type": "number"
+    },
+    "command_seq": {
+      "minimum": 0,
+      "title": "Command Seq",
+      "type": "integer"
+    },
+    "expires_at_ns": {
+      "minimum": 0,
+      "title": "Expires At Ns",
+      "type": "integer"
+    },
+    "hold_position": {
+      "default": false,
+      "title": "Hold Position",
+      "type": "boolean"
+    },
+    "issued_at_ns": {
+      "minimum": 0,
+      "title": "Issued At Ns",
+      "type": "integer"
+    },
+    "linear_mps": {
+      "maximum": 2.0,
+      "minimum": -2.0,
+      "title": "Linear Mps",
+      "type": "number"
+    },
+    "robot_id": {
+      "maxLength": 40,
+      "title": "Robot Id",
+      "type": "string"
+    },
+    "time_domain": {
+      "$ref": "#/$defs/TimeDomain"
+    }
+  },
+  "required": [
+    "robot_id",
+    "command_seq",
+    "linear_mps",
+    "angular_radps",
+    "issued_at_ns",
+    "expires_at_ns",
+    "time_domain"
+  ],
+  "title": "MotionCommand",
+  "type": "object",
+  "x-niharamesh-version": "1.0.0"
+}

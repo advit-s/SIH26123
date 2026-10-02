@@ -1,0 +1,1725 @@
+{
+  "$defs": {
+    "ActuatorModel": {
+      "additionalProperties": false,
+      "properties": {
+        "accel_mps2": {
+          "default": 0.5,
+          "exclusiveMinimum": 0.0,
+          "maximum": 5.0,
+          "title": "Accel Mps2",
+          "type": "number"
+        },
+        "angular_accel_radps2": {
+          "default": 1.5,
+          "exclusiveMinimum": 0.0,
+          "maximum": 10.0,
+          "title": "Angular Accel Radps2",
+          "type": "number"
+        },
+        "command_ttl_s": {
+          "default": 0.4,
+          "exclusiveMinimum": 0.01,
+          "maximum": 10.0,
+          "title": "Command Ttl S",
+          "type": "number"
+        },
+        "decel_mps2": {
+          "default": 0.8,
+          "exclusiveMinimum": 0.0,
+          "maximum": 10.0,
+          "title": "Decel Mps2",
+          "type": "number"
+        },
+        "max_angular_radps": {
+          "default": 1.0,
+          "exclusiveMinimum": 0.0,
+          "maximum": 3.0,
+          "title": "Max Angular Radps",
+          "type": "number"
+        },
+        "max_linear_mps": {
+          "default": 0.4,
+          "exclusiveMinimum": 0.0,
+          "maximum": 2.0,
+          "title": "Max Linear Mps",
+          "type": "number"
+        }
+      },
+      "title": "ActuatorModel",
+      "type": "object"
+    },
+    "AssignmentPolicy": {
+      "enum": [
+        "none",
+        "local_auction"
+      ],
+      "title": "AssignmentPolicy",
+      "type": "string"
+    },
+    "BatteryModel": {
+      "additionalProperties": false,
+      "description": "Declared battery model. UI must state ``source`` alongside any value.",
+      "properties": {
+        "drain_per_metre_c": {
+          "default": 4e-05,
+          "maximum": 1.0,
+          "minimum": 0.0,
+          "title": "Drain Per Metre C",
+          "type": "number"
+        },
+        "drain_per_second_idle_c": {
+          "default": 8e-06,
+          "maximum": 1.0,
+          "minimum": 0.0,
+          "title": "Drain Per Second Idle C",
+          "type": "number"
+        },
+        "service_drain_c": {
+          "default": 0.0005,
+          "maximum": 1.0,
+          "minimum": 0.0,
+          "title": "Service Drain C",
+          "type": "number"
+        },
+        "source": {
+          "default": "simulated",
+          "maxLength": 16,
+          "title": "Source",
+          "type": "string"
+        },
+        "start_fraction": {
+          "default": 0.92,
+          "maximum": 1.0,
+          "minimum": 0.01,
+          "title": "Start Fraction",
+          "type": "number"
+        }
+      },
+      "title": "BatteryModel",
+      "type": "object"
+    },
+    "Berth": {
+      "additionalProperties": false,
+      "description": "A safe resting place: a place where a stopped robot is *not* holding\nanother robot's zone authority.",
+      "properties": {
+        "capacity": {
+          "default": 1,
+          "maximum": 16,
+          "minimum": 1,
+          "title": "Capacity",
+          "type": "integer"
+        },
+        "id": {
+          "maxLength": 40,
+          "minLength": 1,
+          "title": "Id",
+          "type": "string"
+        },
+        "pose": {
+          "$ref": "#/$defs/Pose2"
+        }
+      },
+      "required": [
+        "id",
+        "pose"
+      ],
+      "title": "Berth",
+      "type": "object"
+    },
+    "Capability": {
+      "enum": [
+        "carry_payload",
+        "tow",
+        "spot_fill",
+        "dock",
+        "clean"
+      ],
+      "title": "Capability",
+      "type": "string"
+    },
+    "ComparisonMode": {
+      "enum": [
+        "coordination_only",
+        "end_to_end"
+      ],
+      "title": "ComparisonMode",
+      "type": "string"
+    },
+    "CoordinationPolicy": {
+      "description": "The two policies that must sit behind identical interfaces.",
+      "enum": [
+        "stop_and_wait",
+        "canonical_sequential"
+      ],
+      "title": "CoordinationPolicy",
+      "type": "string"
+    },
+    "FaultChannel": {
+      "enum": [
+        "coordination",
+        "telemetry"
+      ],
+      "title": "FaultChannel",
+      "type": "string"
+    },
+    "FaultKind": {
+      "enum": [
+        "delay",
+        "loss",
+        "duplicate",
+        "reorder",
+        "partition",
+        "clock_skew",
+        "obstacle_insert",
+        "obstacle_remove",
+        "sensor_stale",
+        "sensor_dropout",
+        "control_overload",
+        "process_crash",
+        "process_restart",
+        "journal_corrupt"
+      ],
+      "title": "FaultKind",
+      "type": "string"
+    },
+    "FaultSpec": {
+      "additionalProperties": false,
+      "properties": {
+        "duration_s": {
+          "default": 1.0,
+          "maximum": 86400.0,
+          "minimum": 0.0,
+          "title": "Duration S",
+          "type": "number"
+        },
+        "expected_invariant": {
+          "maxLength": 200,
+          "minLength": 1,
+          "title": "Expected Invariant",
+          "type": "string"
+        },
+        "fault_id": {
+          "maxLength": 96,
+          "minLength": 1,
+          "title": "Fault Id",
+          "type": "string"
+        },
+        "params": {
+          "additionalProperties": {
+            "type": "number"
+          },
+          "title": "Params",
+          "type": "object"
+        },
+        "schema_version": {
+          "default": "1.0.0",
+          "title": "Schema Version",
+          "type": "string"
+        },
+        "seed": {
+          "default": 0,
+          "maximum": 2147483647,
+          "minimum": 0,
+          "title": "Seed",
+          "type": "integer"
+        },
+        "start_at_s": {
+          "default": 0.0,
+          "maximum": 86400.0,
+          "minimum": 0.0,
+          "title": "Start At S",
+          "type": "number"
+        },
+        "target": {
+          "$ref": "#/$defs/FaultTarget"
+        }
+      },
+      "required": [
+        "fault_id",
+        "target",
+        "expected_invariant"
+      ],
+      "title": "FaultSpec",
+      "type": "object"
+    },
+    "FaultTarget": {
+      "additionalProperties": false,
+      "description": "Explicit sender/receiver targeting. A fault with no target is invalid -\nthe brief requires directed fault injection, not a global toggle.",
+      "properties": {
+        "channel": {
+          "$ref": "#/$defs/FaultChannel"
+        },
+        "kind": {
+          "$ref": "#/$defs/FaultKind"
+        },
+        "message_kind": {
+          "anyOf": [
+            {
+              "maxLength": 32,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Message Kind"
+        },
+        "position": {
+          "anyOf": [
+            {
+              "maxItems": 2,
+              "minItems": 2,
+              "prefixItems": [
+                {
+                  "type": "number"
+                },
+                {
+                  "type": "number"
+                }
+              ],
+              "type": "array"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Position"
+        },
+        "receiver": {
+          "anyOf": [
+            {
+              "maxLength": 40,
+              "minLength": 1,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Receiver"
+        },
+        "robot": {
+          "anyOf": [
+            {
+              "maxLength": 40,
+              "minLength": 1,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Robot"
+        },
+        "sender": {
+          "anyOf": [
+            {
+              "maxLength": 40,
+              "minLength": 1,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Sender"
+        },
+        "zone_id": {
+          "anyOf": [
+            {
+              "maxLength": 40,
+              "minLength": 1,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Zone Id"
+        }
+      },
+      "required": [
+        "channel",
+        "kind"
+      ],
+      "title": "FaultTarget",
+      "type": "object"
+    },
+    "FeatureFlags": {
+      "additionalProperties": false,
+      "description": "Ablation switches. Unsafe research variants are namespaced so they can\nnever be enabled by accident in a physical deployment.",
+      "properties": {
+        "blocked_aware_routing": {
+          "default": true,
+          "title": "Blocked Aware Routing",
+          "type": "boolean"
+        },
+        "disable_safety_gate": {
+          "default": false,
+          "title": "Disable Safety Gate",
+          "type": "boolean"
+        },
+        "fairness_aware_priority": {
+          "default": true,
+          "title": "Fairness Aware Priority",
+          "type": "boolean"
+        },
+        "task_reassignment": {
+          "default": true,
+          "title": "Task Reassignment",
+          "type": "boolean"
+        },
+        "temporal_planning": {
+          "default": false,
+          "title": "Temporal Planning",
+          "type": "boolean"
+        },
+        "timer_expiry_occupancy": {
+          "default": false,
+          "title": "Timer Expiry Occupancy",
+          "type": "boolean"
+        },
+        "unsafe_flags": {
+          "default": [],
+          "items": {
+            "type": "string"
+          },
+          "title": "Unsafe Flags",
+          "type": "array"
+        },
+        "unsafe_research_variant": {
+          "default": false,
+          "title": "Unsafe Research Variant",
+          "type": "boolean"
+        }
+      },
+      "title": "FeatureFlags",
+      "type": "object"
+    },
+    "Footprint": {
+      "additionalProperties": false,
+      "description": "Finite robot geometry, plus payload overhang when carrying.\n\n``length_m``/``width_m`` describe the chassis. ``payload_length_m`` and\n``payload_width_m`` describe the largest carried load. ``payload_offset_m``\nis the distance from the chassis centre to the payload centre along the\nchassis ``+x`` axis (positive = front overhang).",
+      "properties": {
+        "length_m": {
+          "exclusiveMinimum": 0.0,
+          "maximum": 5.0,
+          "title": "Length M",
+          "type": "number"
+        },
+        "payload_length_m": {
+          "default": 0.0,
+          "maximum": 5.0,
+          "minimum": 0.0,
+          "title": "Payload Length M",
+          "type": "number"
+        },
+        "payload_offset_m": {
+          "default": 0.0,
+          "maximum": 1.0,
+          "minimum": -1.0,
+          "title": "Payload Offset M",
+          "type": "number"
+        },
+        "payload_width_m": {
+          "default": 0.0,
+          "maximum": 5.0,
+          "minimum": 0.0,
+          "title": "Payload Width M",
+          "type": "number"
+        },
+        "turning_radius_m": {
+          "default": 0.35,
+          "exclusiveMinimum": 0.0,
+          "maximum": 5.0,
+          "title": "Turning Radius M",
+          "type": "number"
+        },
+        "width_m": {
+          "exclusiveMinimum": 0.0,
+          "maximum": 5.0,
+          "title": "Width M",
+          "type": "number"
+        }
+      },
+      "required": [
+        "length_m",
+        "width_m"
+      ],
+      "title": "Footprint",
+      "type": "object"
+    },
+    "IntentDescription": {
+      "additionalProperties": false,
+      "description": "Human-readable description of the experiment, shown in the UI.",
+      "properties": {
+        "expect": {
+          "default": "",
+          "maxLength": 400,
+          "title": "Expect",
+          "type": "string"
+        },
+        "expected_failure_reason": {
+          "default": "",
+          "maxLength": 200,
+          "title": "Expected Failure Reason",
+          "type": "string"
+        },
+        "goal": {
+          "maxLength": 240,
+          "minLength": 1,
+          "title": "Goal",
+          "type": "string"
+        }
+      },
+      "required": [
+        "goal"
+      ],
+      "title": "IntentDescription",
+      "type": "object"
+    },
+    "MapBoundary": {
+      "additionalProperties": false,
+      "description": "Axis-aligned usable envelope of the warehouse, in metres.",
+      "properties": {
+        "max_x": {
+          "maximum": 1000000000.0,
+          "minimum": -1000000000.0,
+          "title": "Max X",
+          "type": "number"
+        },
+        "max_y": {
+          "maximum": 1000000000.0,
+          "minimum": -1000000000.0,
+          "title": "Max Y",
+          "type": "number"
+        },
+        "min_x": {
+          "maximum": 1000000000.0,
+          "minimum": -1000000000.0,
+          "title": "Min X",
+          "type": "number"
+        },
+        "min_y": {
+          "maximum": 1000000000.0,
+          "minimum": -1000000000.0,
+          "title": "Min Y",
+          "type": "number"
+        }
+      },
+      "required": [
+        "min_x",
+        "min_y",
+        "max_x",
+        "max_y"
+      ],
+      "title": "MapBoundary",
+      "type": "object"
+    },
+    "Obstacle": {
+      "additionalProperties": false,
+      "properties": {
+        "dynamic": {
+          "default": false,
+          "title": "Dynamic",
+          "type": "boolean"
+        },
+        "id": {
+          "maxLength": 40,
+          "minLength": 1,
+          "title": "Id",
+          "type": "string"
+        },
+        "kind": {
+          "$ref": "#/$defs/ObstacleKind",
+          "default": "shelf"
+        },
+        "length_m": {
+          "exclusiveMinimum": 0.0,
+          "maximum": 200.0,
+          "title": "Length M",
+          "type": "number"
+        },
+        "pose": {
+          "$ref": "#/$defs/Pose2"
+        },
+        "width_m": {
+          "exclusiveMinimum": 0.0,
+          "maximum": 200.0,
+          "title": "Width M",
+          "type": "number"
+        }
+      },
+      "required": [
+        "id",
+        "pose",
+        "length_m",
+        "width_m"
+      ],
+      "title": "Obstacle",
+      "type": "object"
+    },
+    "ObstacleKind": {
+      "enum": [
+        "shelf",
+        "wall",
+        "pillar",
+        "temporary"
+      ],
+      "title": "ObstacleKind",
+      "type": "string"
+    },
+    "Pose2": {
+      "additionalProperties": false,
+      "description": "Planar pose in metres/radians. Distinct from a *measured* pose estimate.",
+      "properties": {
+        "theta": {
+          "maximum": 1000000000.0,
+          "minimum": -1000000000.0,
+          "title": "Theta",
+          "type": "number"
+        },
+        "x": {
+          "maximum": 1000000000.0,
+          "minimum": -1000000000.0,
+          "title": "X",
+          "type": "number"
+        },
+        "y": {
+          "maximum": 1000000000.0,
+          "minimum": -1000000000.0,
+          "title": "Y",
+          "type": "number"
+        }
+      },
+      "required": [
+        "x",
+        "y",
+        "theta"
+      ],
+      "title": "Pose2",
+      "type": "object"
+    },
+    "ProtocolTiming": {
+      "additionalProperties": false,
+      "description": "All protocol deadlines live in the agent's declared time domain.",
+      "properties": {
+        "cancel_timeout_s": {
+          "default": 1.5,
+          "exclusiveMinimum": 0.01,
+          "maximum": 10.0,
+          "title": "Cancel Timeout S",
+          "type": "number"
+        },
+        "control_period_s": {
+          "default": 0.05,
+          "exclusiveMinimum": 0.005,
+          "maximum": 1.0,
+          "title": "Control Period S",
+          "type": "number"
+        },
+        "freshness_horizon_s": {
+          "default": 1.0,
+          "exclusiveMinimum": 0.01,
+          "maximum": 10.0,
+          "title": "Freshness Horizon S",
+          "type": "number"
+        },
+        "heartbeat_period_s": {
+          "default": 0.2,
+          "exclusiveMinimum": 0.01,
+          "maximum": 10.0,
+          "title": "Heartbeat Period S",
+          "type": "number"
+        },
+        "intent_publish_period_s": {
+          "default": 0.5,
+          "exclusiveMinimum": 0.01,
+          "maximum": 5.0,
+          "title": "Intent Publish Period S",
+          "type": "number"
+        },
+        "intent_validity_s": {
+          "default": 3.0,
+          "exclusiveMinimum": 0.05,
+          "maximum": 30.0,
+          "title": "Intent Validity S",
+          "type": "number"
+        },
+        "queue_tiebreak_s": {
+          "default": 0.0,
+          "maximum": 5.0,
+          "minimum": 0.0,
+          "title": "Queue Tiebreak S",
+          "type": "number"
+        },
+        "release_timeout_s": {
+          "default": 5.0,
+          "exclusiveMinimum": 0.01,
+          "maximum": 30.0,
+          "title": "Release Timeout S",
+          "type": "number"
+        },
+        "solicit_timeout_s": {
+          "default": 0.8,
+          "exclusiveMinimum": 0.01,
+          "maximum": 10.0,
+          "title": "Solicit Timeout S",
+          "type": "number"
+        },
+        "state_publish_period_s": {
+          "default": 0.1,
+          "exclusiveMinimum": 0.01,
+          "maximum": 5.0,
+          "title": "State Publish Period S",
+          "type": "number"
+        }
+      },
+      "title": "ProtocolTiming",
+      "type": "object"
+    },
+    "RobotIdentity": {
+      "additionalProperties": false,
+      "description": "Persistent identity of a physical robot.",
+      "properties": {
+        "capabilities": {
+          "default": [
+            "carry_payload"
+          ],
+          "items": {
+            "$ref": "#/$defs/Capability"
+          },
+          "title": "Capabilities",
+          "type": "array"
+        },
+        "footprint": {
+          "$ref": "#/$defs/Footprint"
+        },
+        "max_angular_radps": {
+          "default": 1.0,
+          "exclusiveMinimum": 0.0,
+          "maximum": 3.0,
+          "title": "Max Angular Radps",
+          "type": "number"
+        },
+        "max_linear_mps": {
+          "default": 0.4,
+          "exclusiveMinimum": 0.0,
+          "maximum": 2.0,
+          "title": "Max Linear Mps",
+          "type": "number"
+        },
+        "model": {
+          "default": "niharamesh-amr",
+          "maxLength": 64,
+          "title": "Model",
+          "type": "string"
+        },
+        "robot_id": {
+          "maxLength": 40,
+          "minLength": 1,
+          "title": "Robot Id",
+          "type": "string"
+        },
+        "schema_version": {
+          "default": "1.0.0",
+          "title": "Schema Version",
+          "type": "string"
+        }
+      },
+      "required": [
+        "robot_id",
+        "footprint"
+      ],
+      "title": "RobotIdentity",
+      "type": "object"
+    },
+    "RobotStart": {
+      "additionalProperties": false,
+      "properties": {
+        "assigned_task_id": {
+          "anyOf": [
+            {
+              "maxLength": 40,
+              "minLength": 1,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Assigned Task Id"
+        },
+        "holding_task_id": {
+          "anyOf": [
+            {
+              "maxLength": 40,
+              "minLength": 1,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Holding Task Id"
+        },
+        "pose": {
+          "$ref": "#/$defs/Pose2"
+        },
+        "robot_id": {
+          "maxLength": 40,
+          "title": "Robot Id",
+          "type": "string"
+        }
+      },
+      "required": [
+        "robot_id",
+        "pose"
+      ],
+      "title": "RobotStart",
+      "type": "object"
+    },
+    "RouteEdge": {
+      "additionalProperties": false,
+      "description": "Directed travel edge for the optional directed-route graph.\n\nWhen a map declares ``directed_routes``, the planner must respect\n``one_way`` on each edge. This is a topological *hint*, not authority.",
+      "properties": {
+        "cost_m": {
+          "exclusiveMinimum": 0.0,
+          "maximum": 1000.0,
+          "title": "Cost M",
+          "type": "number"
+        },
+        "from_pose": {
+          "$ref": "#/$defs/Pose2"
+        },
+        "id": {
+          "maxLength": 40,
+          "minLength": 1,
+          "title": "Id",
+          "type": "string"
+        },
+        "one_way": {
+          "default": true,
+          "title": "One Way",
+          "type": "boolean"
+        },
+        "to_pose": {
+          "$ref": "#/$defs/Pose2"
+        }
+      },
+      "required": [
+        "id",
+        "from_pose",
+        "to_pose",
+        "cost_m"
+      ],
+      "title": "RouteEdge",
+      "type": "object"
+    },
+    "RoutingPolicy": {
+      "enum": [
+        "shortest",
+        "blocked_aware",
+        "temporal_sipp_approx"
+      ],
+      "title": "RoutingPolicy",
+      "type": "string"
+    },
+    "RunPolicy": {
+      "additionalProperties": false,
+      "properties": {
+        "assignment": {
+          "$ref": "#/$defs/AssignmentPolicy",
+          "default": "local_auction"
+        },
+        "comparison_mode": {
+          "$ref": "#/$defs/ComparisonMode",
+          "default": "coordination_only"
+        },
+        "coordination": {
+          "$ref": "#/$defs/CoordinationPolicy",
+          "default": "canonical_sequential"
+        },
+        "fault_seed": {
+          "default": 3,
+          "maximum": 2147483647,
+          "minimum": 0,
+          "title": "Fault Seed",
+          "type": "integer"
+        },
+        "planner_seed": {
+          "default": 1,
+          "maximum": 2147483647,
+          "minimum": 0,
+          "title": "Planner Seed",
+          "type": "integer"
+        },
+        "routing": {
+          "$ref": "#/$defs/RoutingPolicy",
+          "default": "blocked_aware"
+        },
+        "sensor_seed": {
+          "default": 2,
+          "maximum": 2147483647,
+          "minimum": 0,
+          "title": "Sensor Seed",
+          "type": "integer"
+        }
+      },
+      "title": "RunPolicy",
+      "type": "object"
+    },
+    "SensorModel": {
+      "additionalProperties": false,
+      "description": "Declared sensing limits and noise. Every value is a simulation\nconfiguration, labelled as such wherever it is displayed.",
+      "properties": {
+        "angular_resolution_rad": {
+          "default": 0.0436,
+          "exclusiveMinimum": 0.001,
+          "maximum": 0.5,
+          "title": "Angular Resolution Rad",
+          "type": "number"
+        },
+        "dropout_probability": {
+          "default": 0.02,
+          "maximum": 1.0,
+          "minimum": 0.0,
+          "title": "Dropout Probability",
+          "type": "number"
+        },
+        "field_of_view_rad": {
+          "default": 4.712,
+          "exclusiveMinimum": 0.1,
+          "maximum": 6.28318,
+          "title": "Field Of View Rad",
+          "type": "number"
+        },
+        "heading_sigma_rad": {
+          "default": 0.01,
+          "maximum": 1.0,
+          "minimum": 0.0,
+          "title": "Heading Sigma Rad",
+          "type": "number"
+        },
+        "observation_latency_s": {
+          "default": 0.1,
+          "maximum": 10.0,
+          "minimum": 0.0,
+          "title": "Observation Latency S",
+          "type": "number"
+        },
+        "position_sigma_m": {
+          "default": 0.02,
+          "maximum": 1.0,
+          "minimum": 0.0,
+          "title": "Position Sigma M",
+          "type": "number"
+        },
+        "range_m": {
+          "default": 3.0,
+          "exclusiveMinimum": 0.1,
+          "maximum": 100.0,
+          "title": "Range M",
+          "type": "number"
+        },
+        "range_noise_m": {
+          "default": 0.02,
+          "maximum": 1.0,
+          "minimum": 0.0,
+          "title": "Range Noise M",
+          "type": "number"
+        }
+      },
+      "title": "SensorModel",
+      "type": "object"
+    },
+    "SimulationConfig": {
+      "additionalProperties": false,
+      "properties": {
+        "actuator": {
+          "$ref": "#/$defs/ActuatorModel",
+          "default": {
+            "accel_mps2": 0.5,
+            "angular_accel_radps2": 1.5,
+            "command_ttl_s": 0.4,
+            "decel_mps2": 0.8,
+            "max_angular_radps": 1.0,
+            "max_linear_mps": 0.4
+          }
+        },
+        "battery": {
+          "$ref": "#/$defs/BatteryModel",
+          "default": {
+            "drain_per_metre_c": 4e-05,
+            "drain_per_second_idle_c": 8e-06,
+            "service_drain_c": 0.0005,
+            "source": "simulated",
+            "start_fraction": 0.92
+          }
+        },
+        "features": {
+          "$ref": "#/$defs/FeatureFlags",
+          "default": {
+            "blocked_aware_routing": true,
+            "disable_safety_gate": false,
+            "fairness_aware_priority": true,
+            "task_reassignment": true,
+            "temporal_planning": false,
+            "timer_expiry_occupancy": false,
+            "unsafe_flags": [],
+            "unsafe_research_variant": false
+          }
+        },
+        "physical_actuation_enabled": {
+          "default": false,
+          "title": "Physical Actuation Enabled",
+          "type": "boolean"
+        },
+        "physics_step_hz": {
+          "default": 20,
+          "maximum": 200,
+          "minimum": 5,
+          "title": "Physics Step Hz",
+          "type": "integer"
+        },
+        "protocol": {
+          "$ref": "#/$defs/ProtocolTiming",
+          "default": {
+            "cancel_timeout_s": 1.5,
+            "control_period_s": 0.05,
+            "freshness_horizon_s": 1.0,
+            "heartbeat_period_s": 0.2,
+            "intent_publish_period_s": 0.5,
+            "intent_validity_s": 3.0,
+            "queue_tiebreak_s": 0.0,
+            "release_timeout_s": 5.0,
+            "solicit_timeout_s": 0.8,
+            "state_publish_period_s": 0.1
+          }
+        },
+        "schema_version": {
+          "default": "1.0.0",
+          "title": "Schema Version",
+          "type": "string"
+        },
+        "sensor": {
+          "$ref": "#/$defs/SensorModel",
+          "default": {
+            "angular_resolution_rad": 0.0436,
+            "dropout_probability": 0.02,
+            "field_of_view_rad": 4.712,
+            "heading_sigma_rad": 0.01,
+            "observation_latency_s": 0.1,
+            "position_sigma_m": 0.02,
+            "range_m": 3.0,
+            "range_noise_m": 0.02
+          }
+        },
+        "state_publish_hz": {
+          "default": 10,
+          "maximum": 60,
+          "minimum": 1,
+          "title": "State Publish Hz",
+          "type": "integer"
+        },
+        "stopping": {
+          "$ref": "#/$defs/StoppingBudget",
+          "default": {
+            "braking_decel_mps2": 0.8,
+            "extra_margin_m": 0.1,
+            "max_speed_mps": 0.4,
+            "reaction_time_s": 0.3
+          }
+        }
+      },
+      "title": "SimulationConfig",
+      "type": "object"
+    },
+    "Station": {
+      "additionalProperties": false,
+      "properties": {
+        "capacity": {
+          "default": 1,
+          "maximum": 64,
+          "minimum": 1,
+          "title": "Capacity",
+          "type": "integer"
+        },
+        "id": {
+          "maxLength": 40,
+          "minLength": 1,
+          "title": "Id",
+          "type": "string"
+        },
+        "kind": {
+          "$ref": "#/$defs/StationKind"
+        },
+        "pose": {
+          "$ref": "#/$defs/Pose2"
+        },
+        "service_time_s": {
+          "default": 4.0,
+          "maximum": 600.0,
+          "minimum": 0.0,
+          "title": "Service Time S",
+          "type": "number"
+        }
+      },
+      "required": [
+        "id",
+        "kind",
+        "pose"
+      ],
+      "title": "Station",
+      "type": "object"
+    },
+    "StationKind": {
+      "enum": [
+        "pickup",
+        "drop",
+        "charge"
+      ],
+      "title": "StationKind",
+      "type": "string"
+    },
+    "StopLine": {
+      "additionalProperties": false,
+      "description": "Physical line a robot must not cross without the named authority.\n\n``zone_id`` names the authority required. This is the geometric anchor for\n\"stop-line violation\", which the evaluator checks independently.",
+      "properties": {
+        "approach": {
+          "default": "decreasing",
+          "pattern": "^(increasing|decreasing)$",
+          "title": "Approach",
+          "type": "string"
+        },
+        "end": {
+          "maxItems": 2,
+          "minItems": 2,
+          "prefixItems": [
+            {
+              "maximum": 1000000000.0,
+              "minimum": -1000000000.0,
+              "type": "number"
+            },
+            {
+              "maximum": 1000000000.0,
+              "minimum": -1000000000.0,
+              "type": "number"
+            }
+          ],
+          "title": "End",
+          "type": "array"
+        },
+        "id": {
+          "maxLength": 40,
+          "minLength": 1,
+          "title": "Id",
+          "type": "string"
+        },
+        "start": {
+          "maxItems": 2,
+          "minItems": 2,
+          "prefixItems": [
+            {
+              "maximum": 1000000000.0,
+              "minimum": -1000000000.0,
+              "type": "number"
+            },
+            {
+              "maximum": 1000000000.0,
+              "minimum": -1000000000.0,
+              "type": "number"
+            }
+          ],
+          "title": "Start",
+          "type": "array"
+        },
+        "zone_id": {
+          "maxLength": 40,
+          "minLength": 1,
+          "title": "Zone Id",
+          "type": "string"
+        }
+      },
+      "required": [
+        "id",
+        "zone_id",
+        "start",
+        "end"
+      ],
+      "title": "StopLine",
+      "type": "object"
+    },
+    "StoppingBudget": {
+      "additionalProperties": false,
+      "description": "Derived stopping distance parameters.\n\nThese are *configured assumptions* for a low-speed simulation. They are not\ncertified real-world limits and are never presented as a safety guarantee.\n\nExample from the brief at v=0.4 m/s, t_r=0.30 s, a=0.8 m/s^2, margin=0.10 m:\nreaction 0.12 m + braking 0.10 m + margin 0.10 m = 0.32 m.",
+      "properties": {
+        "braking_decel_mps2": {
+          "default": 0.8,
+          "exclusiveMinimum": 0.0,
+          "maximum": 10.0,
+          "title": "Braking Decel Mps2",
+          "type": "number"
+        },
+        "extra_margin_m": {
+          "default": 0.1,
+          "maximum": 5.0,
+          "minimum": 0.0,
+          "title": "Extra Margin M",
+          "type": "number"
+        },
+        "max_speed_mps": {
+          "default": 0.4,
+          "exclusiveMinimum": 0.0,
+          "maximum": 2.0,
+          "title": "Max Speed Mps",
+          "type": "number"
+        },
+        "reaction_time_s": {
+          "default": 0.3,
+          "maximum": 5.0,
+          "minimum": 0.0,
+          "title": "Reaction Time S",
+          "type": "number"
+        }
+      },
+      "title": "StoppingBudget",
+      "type": "object"
+    },
+    "Task": {
+      "additionalProperties": false,
+      "description": "A transport job. Generated independently of assignment.",
+      "properties": {
+        "drop_station_id": {
+          "maxLength": 40,
+          "title": "Drop Station Id",
+          "type": "string"
+        },
+        "pickup_station_id": {
+          "maxLength": 40,
+          "title": "Pickup Station Id",
+          "type": "string"
+        },
+        "priority": {
+          "default": 100,
+          "maximum": 1000,
+          "minimum": 0,
+          "title": "Priority",
+          "type": "integer"
+        },
+        "release_at_s": {
+          "default": 0.0,
+          "maximum": 86400.0,
+          "minimum": 0.0,
+          "title": "Release At S",
+          "type": "number"
+        },
+        "required_capabilities": {
+          "default": [],
+          "items": {
+            "type": "string"
+          },
+          "title": "Required Capabilities",
+          "type": "array"
+        },
+        "schema_version": {
+          "default": "1.0.0",
+          "title": "Schema Version",
+          "type": "string"
+        },
+        "service_time_s": {
+          "default": 4.0,
+          "maximum": 3600.0,
+          "minimum": 0.0,
+          "title": "Service Time S",
+          "type": "number"
+        },
+        "task_id": {
+          "maxLength": 40,
+          "minLength": 1,
+          "title": "Task Id",
+          "type": "string"
+        },
+        "weight_kg": {
+          "default": 5.0,
+          "maximum": 1000.0,
+          "minimum": 0.0,
+          "title": "Weight Kg",
+          "type": "number"
+        }
+      },
+      "required": [
+        "task_id",
+        "pickup_station_id",
+        "drop_station_id"
+      ],
+      "title": "Task",
+      "type": "object"
+    },
+    "WarehouseMap": {
+      "additionalProperties": false,
+      "description": "Immutable shared map. Every agent receives exactly this object.",
+      "properties": {
+        "berths": {
+          "default": [],
+          "items": {
+            "$ref": "#/$defs/Berth"
+          },
+          "title": "Berths",
+          "type": "array"
+        },
+        "boundary": {
+          "$ref": "#/$defs/MapBoundary"
+        },
+        "directed_routes": {
+          "default": [],
+          "items": {
+            "$ref": "#/$defs/RouteEdge"
+          },
+          "title": "Directed Routes",
+          "type": "array"
+        },
+        "grid_resolution_m": {
+          "default": 0.1,
+          "exclusiveMinimum": 0.02,
+          "maximum": 0.5,
+          "title": "Grid Resolution M",
+          "type": "number"
+        },
+        "map_id": {
+          "maxLength": 40,
+          "minLength": 1,
+          "title": "Map Id",
+          "type": "string"
+        },
+        "name": {
+          "default": "",
+          "maxLength": 120,
+          "title": "Name",
+          "type": "string"
+        },
+        "nominal_aisle_width_m": {
+          "default": 1.4,
+          "exclusiveMinimum": 0.3,
+          "maximum": 20.0,
+          "title": "Nominal Aisle Width M",
+          "type": "number"
+        },
+        "obstacles": {
+          "default": [],
+          "items": {
+            "$ref": "#/$defs/Obstacle"
+          },
+          "title": "Obstacles",
+          "type": "array"
+        },
+        "revision": {
+          "default": 1,
+          "minimum": 1,
+          "title": "Revision",
+          "type": "integer"
+        },
+        "schema_version": {
+          "default": "1.0.0",
+          "title": "Schema Version",
+          "type": "string"
+        },
+        "stations": {
+          "default": [],
+          "items": {
+            "$ref": "#/$defs/Station"
+          },
+          "title": "Stations",
+          "type": "array"
+        },
+        "stop_lines": {
+          "default": [],
+          "items": {
+            "$ref": "#/$defs/StopLine"
+          },
+          "title": "Stop Lines",
+          "type": "array"
+        },
+        "zones": {
+          "default": [],
+          "items": {
+            "$ref": "#/$defs/Zone"
+          },
+          "title": "Zones",
+          "type": "array"
+        }
+      },
+      "required": [
+        "map_id",
+        "boundary"
+      ],
+      "title": "WarehouseMap",
+      "type": "object"
+    },
+    "Zone": {
+      "additionalProperties": false,
+      "description": "An exclusive resource with disjoint protected geometry.\n\nEvery exclusive zone's protected geometry must be **disjoint** from every\nother exclusive zone's. Where a traversal needs two adjacent resources with\nno safe berth between them, they must be authored as ONE compound zone\n(see ``members``), not as two zones a robot might partially hold.",
+      "properties": {
+        "allowed_movement": {
+          "default": [
+            "forward",
+            "cross"
+          ],
+          "items": {
+            "$ref": "#/$defs/ZoneMovement"
+          },
+          "title": "Allowed Movement",
+          "type": "array"
+        },
+        "description": {
+          "default": "",
+          "maxLength": 240,
+          "title": "Description",
+          "type": "string"
+        },
+        "entry_pose": {
+          "$ref": "#/$defs/Pose2"
+        },
+        "exit_berth_id": {
+          "anyOf": [
+            {
+              "maxLength": 40,
+              "minLength": 1,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Exit Berth Id"
+        },
+        "exit_pose": {
+          "$ref": "#/$defs/Pose2"
+        },
+        "id": {
+          "maxLength": 40,
+          "minLength": 1,
+          "title": "Id",
+          "type": "string"
+        },
+        "kind": {
+          "default": "corridor",
+          "maxLength": 32,
+          "title": "Kind",
+          "type": "string"
+        },
+        "members": {
+          "default": [],
+          "items": {
+            "maxLength": 40,
+            "minLength": 1,
+            "type": "string"
+          },
+          "title": "Members",
+          "type": "array"
+        },
+        "one_way_heading_rad": {
+          "anyOf": [
+            {
+              "maximum": 1000000000.0,
+              "minimum": -1000000000.0,
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "One Way Heading Rad"
+        },
+        "protected_extent": {
+          "maxItems": 2,
+          "minItems": 2,
+          "prefixItems": [
+            {
+              "maximum": 1000000000.0,
+              "minimum": -1000000000.0,
+              "type": "number"
+            },
+            {
+              "maximum": 1000000000.0,
+              "minimum": -1000000000.0,
+              "type": "number"
+            }
+          ],
+          "title": "Protected Extent",
+          "type": "array"
+        },
+        "protected_origin": {
+          "maxItems": 2,
+          "minItems": 2,
+          "prefixItems": [
+            {
+              "maximum": 1000000000.0,
+              "minimum": -1000000000.0,
+              "type": "number"
+            },
+            {
+              "maximum": 1000000000.0,
+              "minimum": -1000000000.0,
+              "type": "number"
+            }
+          ],
+          "title": "Protected Origin",
+          "type": "array"
+        },
+        "queue_berth_id": {
+          "anyOf": [
+            {
+              "maxLength": 40,
+              "minLength": 1,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Queue Berth Id"
+        },
+        "stop_line_in": {
+          "anyOf": [
+            {
+              "maxLength": 40,
+              "minLength": 1,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Stop Line In"
+        },
+        "stop_line_out": {
+          "anyOf": [
+            {
+              "maxLength": 40,
+              "minLength": 1,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Stop Line Out"
+        }
+      },
+      "required": [
+        "id",
+        "protected_origin",
+        "protected_extent",
+        "entry_pose",
+        "exit_pose"
+      ],
+      "title": "Zone",
+      "type": "object"
+    },
+    "ZoneMovement": {
+      "description": "The protected movement a zone authorises.\n\n``FWD``  - traverse along the zone's declared axis, either direction.\n``REV``  - traverse against the declared axis (used for one-way aisles).\n``CROSS``- cross the zone (intersections / junctions).",
+      "enum": [
+        "forward",
+        "reverse",
+        "cross"
+      ],
+      "title": "ZoneMovement",
+      "type": "string"
+    }
+  },
+  "$id": "https://niharamesh.local/schemas/Scenario.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "description": "The authored experiment. Validated separately (structure vs feasibility).",
+  "properties": {
+    "description": {
+      "default": "",
+      "maxLength": 400,
+      "title": "Description",
+      "type": "string"
+    },
+    "faults": {
+      "default": [],
+      "items": {
+        "$ref": "#/$defs/FaultSpec"
+      },
+      "title": "Faults",
+      "type": "array"
+    },
+    "intent": {
+      "$ref": "#/$defs/IntentDescription"
+    },
+    "kind": {
+      "default": "nominal",
+      "enum": [
+        "nominal",
+        "fault",
+        "diagnostic",
+        "benchmark"
+      ],
+      "title": "Kind",
+      "type": "string"
+    },
+    "map": {
+      "$ref": "#/$defs/WarehouseMap"
+    },
+    "max_sim_time_s": {
+      "default": 900.0,
+      "exclusiveMinimum": 1.0,
+      "maximum": 86400.0,
+      "title": "Max Sim Time S",
+      "type": "number"
+    },
+    "name": {
+      "maxLength": 120,
+      "minLength": 1,
+      "title": "Name",
+      "type": "string"
+    },
+    "policy": {
+      "$ref": "#/$defs/RunPolicy",
+      "default": {
+        "assignment": "local_auction",
+        "comparison_mode": "coordination_only",
+        "coordination": "canonical_sequential",
+        "fault_seed": 3,
+        "planner_seed": 1,
+        "routing": "blocked_aware",
+        "sensor_seed": 2
+      }
+    },
+    "revision": {
+      "default": 1,
+      "minimum": 1,
+      "title": "Revision",
+      "type": "integer"
+    },
+    "robots": {
+      "items": {
+        "$ref": "#/$defs/RobotIdentity"
+      },
+      "title": "Robots",
+      "type": "array"
+    },
+    "scenario_id": {
+      "maxLength": 40,
+      "minLength": 1,
+      "title": "Scenario Id",
+      "type": "string"
+    },
+    "schema_version": {
+      "default": "1.0.0",
+      "title": "Schema Version",
+      "type": "string"
+    },
+    "seed": {
+      "default": 20260101,
+      "maximum": 2147483647,
+      "minimum": 0,
+      "title": "Seed",
+      "type": "integer"
+    },
+    "simulation": {
+      "$ref": "#/$defs/SimulationConfig",
+      "default": {
+        "actuator": {
+          "accel_mps2": 0.5,
+          "angular_accel_radps2": 1.5,
+          "command_ttl_s": 0.4,
+          "decel_mps2": 0.8,
+          "max_angular_radps": 1.0,
+          "max_linear_mps": 0.4
+        },
+        "battery": {
+          "drain_per_metre_c": 4e-05,
+          "drain_per_second_idle_c": 8e-06,
+          "service_drain_c": 0.0005,
+          "source": "simulated",
+          "start_fraction": 0.92
+        },
+        "features": {
+          "blocked_aware_routing": true,
+          "disable_safety_gate": false,
+          "fairness_aware_priority": true,
+          "task_reassignment": true,
+          "temporal_planning": false,
+          "timer_expiry_occupancy": false,
+          "unsafe_flags": [],
+          "unsafe_research_variant": false
+        },
+        "physical_actuation_enabled": false,
+        "physics_step_hz": 20,
+        "protocol": {
+          "cancel_timeout_s": 1.5,
+          "control_period_s": 0.05,
+          "freshness_horizon_s": 1.0,
+          "heartbeat_period_s": 0.2,
+          "intent_publish_period_s": 0.5,
+          "intent_validity_s": 3.0,
+          "queue_tiebreak_s": 0.0,
+          "release_timeout_s": 5.0,
+          "solicit_timeout_s": 0.8,
+          "state_publish_period_s": 0.1
+        },
+        "schema_version": "1.0.0",
+        "sensor": {
+          "angular_resolution_rad": 0.0436,
+          "dropout_probability": 0.02,
+          "field_of_view_rad": 4.712,
+          "heading_sigma_rad": 0.01,
+          "observation_latency_s": 0.1,
+          "position_sigma_m": 0.02,
+          "range_m": 3.0,
+          "range_noise_m": 0.02
+        },
+        "state_publish_hz": 10,
+        "stopping": {
+          "braking_decel_mps2": 0.8,
+          "extra_margin_m": 0.1,
+          "max_speed_mps": 0.4,
+          "reaction_time_s": 0.3
+        }
+      }
+    },
+    "starts": {
+      "items": {
+        "$ref": "#/$defs/RobotStart"
+      },
+      "title": "Starts",
+      "type": "array"
+    },
+    "tasks": {
+      "default": [],
+      "items": {
+        "$ref": "#/$defs/Task"
+      },
+      "title": "Tasks",
+      "type": "array"
+    }
+  },
+  "required": [
+    "scenario_id",
+    "name",
+    "intent",
+    "map",
+    "robots",
+    "starts"
+  ],
+  "title": "Scenario",
+  "type": "object",
+  "x-niharamesh-version": "1.0.0"
+}

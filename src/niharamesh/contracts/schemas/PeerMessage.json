@@ -1,0 +1,1120 @@
+{
+  "$defs": {
+    "Heartbeat": {
+      "additionalProperties": false,
+      "description": "Liveness only. Explicitly *not* usable intent and *not* clearance.",
+      "properties": {
+        "degraded": {
+          "default": false,
+          "title": "Degraded",
+          "type": "boolean"
+        },
+        "degraded_reason": {
+          "default": "",
+          "maxLength": 64,
+          "title": "Degraded Reason",
+          "type": "string"
+        },
+        "epoch": {
+          "maxLength": 96,
+          "minLength": 1,
+          "title": "Epoch",
+          "type": "string"
+        },
+        "robot_id": {
+          "maxLength": 40,
+          "minLength": 1,
+          "title": "Robot Id",
+          "type": "string"
+        },
+        "run_id": {
+          "maxLength": 96,
+          "minLength": 1,
+          "title": "Run Id",
+          "type": "string"
+        },
+        "schema_version": {
+          "default": "1.0.0",
+          "title": "Schema Version",
+          "type": "string"
+        },
+        "sent_at_ns": {
+          "minimum": 0,
+          "title": "Sent At Ns",
+          "type": "integer"
+        },
+        "seq": {
+          "minimum": 0,
+          "title": "Seq",
+          "type": "integer"
+        },
+        "session_id": {
+          "maxLength": 40,
+          "title": "Session Id",
+          "type": "string"
+        },
+        "time_domain": {
+          "$ref": "#/$defs/TimeDomain"
+        }
+      },
+      "required": [
+        "run_id",
+        "epoch",
+        "robot_id",
+        "session_id",
+        "seq",
+        "sent_at_ns",
+        "time_domain"
+      ],
+      "title": "Heartbeat",
+      "type": "object"
+    },
+    "ObstructionReport": {
+      "additionalProperties": false,
+      "description": "Shared observation of an obstruction, with provenance and age.",
+      "properties": {
+        "confidence": {
+          "default": 0.8,
+          "maximum": 1.0,
+          "minimum": 0.0,
+          "title": "Confidence",
+          "type": "number"
+        },
+        "kind": {
+          "maxLength": 32,
+          "minLength": 1,
+          "title": "Kind",
+          "type": "string"
+        },
+        "observation_age_ns": {
+          "minimum": 0,
+          "title": "Observation Age Ns",
+          "type": "integer"
+        },
+        "observed_at_ns": {
+          "minimum": 0,
+          "title": "Observed At Ns",
+          "type": "integer"
+        },
+        "position": {
+          "maxItems": 2,
+          "minItems": 2,
+          "prefixItems": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "number"
+            }
+          ],
+          "title": "Position",
+          "type": "array"
+        },
+        "robot_id": {
+          "maxLength": 40,
+          "minLength": 1,
+          "title": "Robot Id",
+          "type": "string"
+        },
+        "session_id": {
+          "maxLength": 40,
+          "title": "Session Id",
+          "type": "string"
+        },
+        "time_domain": {
+          "$ref": "#/$defs/TimeDomain"
+        },
+        "zone_id": {
+          "anyOf": [
+            {
+              "maxLength": 40,
+              "minLength": 1,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Zone Id"
+        }
+      },
+      "required": [
+        "robot_id",
+        "session_id",
+        "position",
+        "kind",
+        "observation_age_ns",
+        "observed_at_ns",
+        "time_domain"
+      ],
+      "title": "ObstructionReport",
+      "type": "object"
+    },
+    "PeerEnvelope": {
+      "additionalProperties": false,
+      "description": "Transport framing metadata. Present on every message, checked on receipt.",
+      "properties": {
+        "correlation_id": {
+          "default": "",
+          "maxLength": 64,
+          "title": "Correlation Id",
+          "type": "string"
+        },
+        "epoch": {
+          "maxLength": 96,
+          "minLength": 1,
+          "title": "Epoch",
+          "type": "string"
+        },
+        "kind": {
+          "maxLength": 32,
+          "minLength": 1,
+          "title": "Kind",
+          "type": "string"
+        },
+        "protocol_version": {
+          "default": "1.0.0",
+          "title": "Protocol Version",
+          "type": "string"
+        },
+        "run_id": {
+          "maxLength": 96,
+          "minLength": 1,
+          "title": "Run Id",
+          "type": "string"
+        },
+        "sender": {
+          "maxLength": 40,
+          "minLength": 1,
+          "title": "Sender",
+          "type": "string"
+        },
+        "sender_session": {
+          "maxLength": 40,
+          "title": "Sender Session",
+          "type": "string"
+        },
+        "sent_at_ns": {
+          "minimum": 0,
+          "title": "Sent At Ns",
+          "type": "integer"
+        },
+        "seq": {
+          "minimum": 0,
+          "title": "Seq",
+          "type": "integer"
+        },
+        "time_domain": {
+          "$ref": "#/$defs/TimeDomain"
+        }
+      },
+      "required": [
+        "kind",
+        "sender",
+        "sender_session",
+        "run_id",
+        "epoch",
+        "seq",
+        "sent_at_ns",
+        "time_domain"
+      ],
+      "title": "PeerEnvelope",
+      "type": "object"
+    },
+    "PeerIntent": {
+      "additionalProperties": false,
+      "description": "Predicted path and the resources the sender expects to need.\n\nAn intent is a *prediction*, never an authorization. Receiving one grants\nnothing.",
+      "properties": {
+        "epoch": {
+          "maxLength": 96,
+          "minLength": 1,
+          "title": "Epoch",
+          "type": "string"
+        },
+        "expected_zones": {
+          "default": [],
+          "items": {
+            "maxLength": 40,
+            "minLength": 1,
+            "type": "string"
+          },
+          "title": "Expected Zones",
+          "type": "array"
+        },
+        "map_digest": {
+          "maxLength": 64,
+          "title": "Map Digest",
+          "type": "string"
+        },
+        "map_id": {
+          "maxLength": 40,
+          "title": "Map Id",
+          "type": "string"
+        },
+        "plan_version": {
+          "minimum": 0,
+          "title": "Plan Version",
+          "type": "integer"
+        },
+        "projected_path": {
+          "default": [],
+          "items": {
+            "maxItems": 3,
+            "minItems": 3,
+            "prefixItems": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "number"
+              },
+              {
+                "type": "number"
+              }
+            ],
+            "type": "array"
+          },
+          "title": "Projected Path",
+          "type": "array"
+        },
+        "protocol_version": {
+          "default": "1.0.0",
+          "title": "Protocol Version",
+          "type": "string"
+        },
+        "robot_id": {
+          "maxLength": 40,
+          "minLength": 1,
+          "title": "Robot Id",
+          "type": "string"
+        },
+        "run_id": {
+          "maxLength": 96,
+          "minLength": 1,
+          "title": "Run Id",
+          "type": "string"
+        },
+        "schema_version": {
+          "default": "1.0.0",
+          "title": "Schema Version",
+          "type": "string"
+        },
+        "sent_at_ns": {
+          "minimum": 0,
+          "title": "Sent At Ns",
+          "type": "integer"
+        },
+        "seq": {
+          "minimum": 0,
+          "title": "Seq",
+          "type": "integer"
+        },
+        "session_id": {
+          "maxLength": 40,
+          "title": "Session Id",
+          "type": "string"
+        },
+        "time_domain": {
+          "$ref": "#/$defs/TimeDomain"
+        },
+        "validity_horizon_ns": {
+          "minimum": 0,
+          "title": "Validity Horizon Ns",
+          "type": "integer"
+        }
+      },
+      "required": [
+        "run_id",
+        "epoch",
+        "map_id",
+        "map_digest",
+        "robot_id",
+        "session_id",
+        "seq",
+        "plan_version",
+        "validity_horizon_ns",
+        "sent_at_ns",
+        "time_domain"
+      ],
+      "title": "PeerIntent",
+      "type": "object"
+    },
+    "PeerState": {
+      "additionalProperties": false,
+      "description": "Published robot state. A claim, never ground truth.",
+      "properties": {
+        "battery_fraction": {
+          "anyOf": [
+            {
+              "maximum": 1.0,
+              "minimum": 0.0,
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Battery Fraction"
+        },
+        "battery_source": {
+          "default": "unavailable",
+          "maxLength": 16,
+          "title": "Battery Source",
+          "type": "string"
+        },
+        "carrying_task_id": {
+          "anyOf": [
+            {
+              "maxLength": 40,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Carrying Task Id"
+        },
+        "pose": {
+          "maxItems": 3,
+          "minItems": 3,
+          "prefixItems": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "number"
+            },
+            {
+              "type": "number"
+            }
+          ],
+          "title": "Pose",
+          "type": "array"
+        },
+        "robot_id": {
+          "maxLength": 40,
+          "minLength": 1,
+          "title": "Robot Id",
+          "type": "string"
+        },
+        "sent_at_ns": {
+          "minimum": 0,
+          "title": "Sent At Ns",
+          "type": "integer"
+        },
+        "seq": {
+          "minimum": 0,
+          "title": "Seq",
+          "type": "integer"
+        },
+        "session_id": {
+          "maxLength": 40,
+          "title": "Session Id",
+          "type": "string"
+        },
+        "stop_reason": {
+          "default": "none",
+          "maxLength": 32,
+          "title": "Stop Reason",
+          "type": "string"
+        },
+        "time_domain": {
+          "$ref": "#/$defs/TimeDomain"
+        },
+        "uncertainty_m": {
+          "minimum": 0.0,
+          "title": "Uncertainty M",
+          "type": "number"
+        },
+        "uncertainty_rad": {
+          "minimum": 0.0,
+          "title": "Uncertainty Rad",
+          "type": "number"
+        },
+        "velocity": {
+          "maxItems": 2,
+          "minItems": 2,
+          "prefixItems": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "number"
+            }
+          ],
+          "title": "Velocity",
+          "type": "array"
+        }
+      },
+      "required": [
+        "robot_id",
+        "session_id",
+        "seq",
+        "pose",
+        "velocity",
+        "uncertainty_m",
+        "uncertainty_rad",
+        "sent_at_ns",
+        "time_domain"
+      ],
+      "title": "PeerState",
+      "type": "object"
+    },
+    "TimeDomain": {
+      "description": "Named clock domains. Values are never mixed across domains.\n\n``LOGICAL``\n    Injected logical simulation time. Freezes when the harness pauses and\n    advances under acceleration. Used by the deterministic mode.\n``SIM_SECONDS``\n    Simulation seconds elapsed since the declared common run start. Derived\n    from ``LOGICAL``; identical semantics, different unit framing.\n``MONOTONIC``\n    The agent's own ``time.monotonic_ns()``. Never comparable across\n    processes without an explicit measured offset *and* uncertainty.\n``DISPLAY_UTC``\n    Wall-clock UTC for human display only. Never used for expiry.",
+      "enum": [
+        "logical",
+        "sim_seconds",
+        "monotonic",
+        "display_utc"
+      ],
+      "title": "TimeDomain",
+      "type": "string"
+    },
+    "ZoneCancelAckBody": {
+      "additionalProperties": false,
+      "properties": {
+        "cancel_seq": {
+          "minimum": 1,
+          "title": "Cancel Seq",
+          "type": "integer"
+        },
+        "no_record": {
+          "default": false,
+          "title": "No Record",
+          "type": "boolean"
+        },
+        "request_version": {
+          "minimum": 1,
+          "title": "Request Version",
+          "type": "integer"
+        },
+        "requester": {
+          "maxLength": 40,
+          "minLength": 1,
+          "title": "Requester",
+          "type": "string"
+        },
+        "requester_session": {
+          "maxLength": 40,
+          "title": "Requester Session",
+          "type": "string"
+        },
+        "voter": {
+          "maxLength": 40,
+          "minLength": 1,
+          "title": "Voter",
+          "type": "string"
+        },
+        "voter_session": {
+          "maxLength": 40,
+          "title": "Voter Session",
+          "type": "string"
+        },
+        "zone_id": {
+          "maxLength": 40,
+          "minLength": 1,
+          "title": "Zone Id",
+          "type": "string"
+        }
+      },
+      "required": [
+        "zone_id",
+        "requester",
+        "requester_session",
+        "request_version",
+        "cancel_seq",
+        "voter",
+        "voter_session"
+      ],
+      "title": "ZoneCancelAckBody",
+      "type": "object"
+    },
+    "ZoneCancelBody": {
+      "additionalProperties": false,
+      "description": "Owner-initiated, durable cancellation.\n\nSent only *after* the owner has persisted ``non_executable = true``. The\n``cancel_seq`` makes cancellation idempotent and makes late grants\nidentifiable.",
+      "properties": {
+        "cancel_seq": {
+          "minimum": 1,
+          "title": "Cancel Seq",
+          "type": "integer"
+        },
+        "durably_non_executable": {
+          "title": "Durably Non Executable",
+          "type": "boolean"
+        },
+        "epoch": {
+          "maxLength": 96,
+          "minLength": 1,
+          "title": "Epoch",
+          "type": "string"
+        },
+        "grant_id": {
+          "maxLength": 24,
+          "title": "Grant Id",
+          "type": "string"
+        },
+        "protocol_version": {
+          "default": "1.0.0",
+          "title": "Protocol Version",
+          "type": "string"
+        },
+        "reason": {
+          "maxLength": 64,
+          "minLength": 1,
+          "title": "Reason",
+          "type": "string"
+        },
+        "request_version": {
+          "minimum": 1,
+          "title": "Request Version",
+          "type": "integer"
+        },
+        "requester": {
+          "maxLength": 40,
+          "minLength": 1,
+          "title": "Requester",
+          "type": "string"
+        },
+        "requester_session": {
+          "maxLength": 40,
+          "title": "Requester Session",
+          "type": "string"
+        },
+        "run_id": {
+          "maxLength": 96,
+          "minLength": 1,
+          "title": "Run Id",
+          "type": "string"
+        },
+        "schema_version": {
+          "default": "1.0.0",
+          "title": "Schema Version",
+          "type": "string"
+        },
+        "time_domain": {
+          "$ref": "#/$defs/TimeDomain"
+        },
+        "zone_id": {
+          "maxLength": 40,
+          "minLength": 1,
+          "title": "Zone Id",
+          "type": "string"
+        }
+      },
+      "required": [
+        "run_id",
+        "epoch",
+        "zone_id",
+        "requester",
+        "requester_session",
+        "request_version",
+        "grant_id",
+        "cancel_seq",
+        "durably_non_executable",
+        "reason",
+        "time_domain"
+      ],
+      "title": "ZoneCancelBody",
+      "type": "object"
+    },
+    "ZoneFenceBody": {
+      "additionalProperties": false,
+      "description": "Supervised, explicit fencing of a zone whose holder failed.\n\nThere is deliberately no \"force release\" message. Fencing makes the zone\nunavailable and is logged as an explicit, operator-visible state change.",
+      "properties": {
+        "epoch": {
+          "maxLength": 96,
+          "minLength": 1,
+          "title": "Epoch",
+          "type": "string"
+        },
+        "fenced_by": {
+          "maxLength": 40,
+          "minLength": 1,
+          "title": "Fenced By",
+          "type": "string"
+        },
+        "operator_authorised": {
+          "default": false,
+          "title": "Operator Authorised",
+          "type": "boolean"
+        },
+        "previous_holder": {
+          "anyOf": [
+            {
+              "maxLength": 40,
+              "minLength": 1,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Previous Holder"
+        },
+        "previous_requester_session": {
+          "anyOf": [
+            {
+              "maxLength": 40,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Previous Requester Session"
+        },
+        "reason": {
+          "maxLength": 120,
+          "minLength": 1,
+          "title": "Reason",
+          "type": "string"
+        },
+        "run_id": {
+          "maxLength": 96,
+          "minLength": 1,
+          "title": "Run Id",
+          "type": "string"
+        },
+        "schema_version": {
+          "default": "1.0.0",
+          "title": "Schema Version",
+          "type": "string"
+        },
+        "zone_id": {
+          "maxLength": 40,
+          "minLength": 1,
+          "title": "Zone Id",
+          "type": "string"
+        }
+      },
+      "required": [
+        "run_id",
+        "epoch",
+        "zone_id",
+        "fenced_by",
+        "reason"
+      ],
+      "title": "ZoneFenceBody",
+      "type": "object"
+    },
+    "ZoneGrantBody": {
+      "additionalProperties": false,
+      "description": "A durable promise. The voter has persisted this before sending it.",
+      "properties": {
+        "epoch": {
+          "maxLength": 96,
+          "minLength": 1,
+          "title": "Epoch",
+          "type": "string"
+        },
+        "grant_id": {
+          "maxLength": 24,
+          "title": "Grant Id",
+          "type": "string"
+        },
+        "is_self_voter": {
+          "default": false,
+          "title": "Is Self Voter",
+          "type": "boolean"
+        },
+        "persistence_record_id": {
+          "maxLength": 96,
+          "minLength": 1,
+          "title": "Persistence Record Id",
+          "type": "string"
+        },
+        "protocol_version": {
+          "default": "1.0.0",
+          "title": "Protocol Version",
+          "type": "string"
+        },
+        "request_version": {
+          "minimum": 1,
+          "title": "Request Version",
+          "type": "integer"
+        },
+        "requester": {
+          "maxLength": 40,
+          "minLength": 1,
+          "title": "Requester",
+          "type": "string"
+        },
+        "requester_session": {
+          "maxLength": 40,
+          "title": "Requester Session",
+          "type": "string"
+        },
+        "required_set_digest": {
+          "maxLength": 64,
+          "title": "Required Set Digest",
+          "type": "string"
+        },
+        "run_id": {
+          "maxLength": 96,
+          "minLength": 1,
+          "title": "Run Id",
+          "type": "string"
+        },
+        "schema_version": {
+          "default": "1.0.0",
+          "title": "Schema Version",
+          "type": "string"
+        },
+        "zone_id": {
+          "maxLength": 40,
+          "minLength": 1,
+          "title": "Zone Id",
+          "type": "string"
+        }
+      },
+      "required": [
+        "run_id",
+        "epoch",
+        "zone_id",
+        "requester",
+        "requester_session",
+        "request_version",
+        "grant_id",
+        "required_set_digest",
+        "persistence_record_id"
+      ],
+      "title": "ZoneGrantBody",
+      "type": "object"
+    },
+    "ZoneOccupyBody": {
+      "additionalProperties": false,
+      "description": "Owner declares physical entry into the zone.",
+      "properties": {
+        "epoch": {
+          "maxLength": 96,
+          "minLength": 1,
+          "title": "Epoch",
+          "type": "string"
+        },
+        "grant_id": {
+          "maxLength": 24,
+          "title": "Grant Id",
+          "type": "string"
+        },
+        "occupancy_seq": {
+          "minimum": 1,
+          "title": "Occupancy Seq",
+          "type": "integer"
+        },
+        "request_version": {
+          "minimum": 1,
+          "title": "Request Version",
+          "type": "integer"
+        },
+        "requester": {
+          "maxLength": 40,
+          "minLength": 1,
+          "title": "Requester",
+          "type": "string"
+        },
+        "requester_session": {
+          "maxLength": 40,
+          "title": "Requester Session",
+          "type": "string"
+        },
+        "run_id": {
+          "maxLength": 96,
+          "minLength": 1,
+          "title": "Run Id",
+          "type": "string"
+        },
+        "zone_id": {
+          "maxLength": 40,
+          "minLength": 1,
+          "title": "Zone Id",
+          "type": "string"
+        }
+      },
+      "required": [
+        "run_id",
+        "epoch",
+        "zone_id",
+        "requester",
+        "requester_session",
+        "request_version",
+        "grant_id",
+        "occupancy_seq"
+      ],
+      "title": "ZoneOccupyBody",
+      "type": "object"
+    },
+    "ZoneReleaseBody": {
+      "additionalProperties": false,
+      "description": "Owner declares exit and requests the authority be handed back.\n\nRelease is **not** effective on send. It becomes effective only after every\nvoter has reconciled the release (a matching release message, never a\ntimeout).",
+      "properties": {
+        "asserts_full_clearance": {
+          "default": true,
+          "title": "Asserts Full Clearance",
+          "type": "boolean"
+        },
+        "epoch": {
+          "maxLength": 96,
+          "minLength": 1,
+          "title": "Epoch",
+          "type": "string"
+        },
+        "grant_id": {
+          "maxLength": 24,
+          "title": "Grant Id",
+          "type": "string"
+        },
+        "occupancy_seq": {
+          "minimum": 1,
+          "title": "Occupancy Seq",
+          "type": "integer"
+        },
+        "protocol_version": {
+          "default": "1.0.0",
+          "title": "Protocol Version",
+          "type": "string"
+        },
+        "release_seq": {
+          "minimum": 1,
+          "title": "Release Seq",
+          "type": "integer"
+        },
+        "request_version": {
+          "minimum": 1,
+          "title": "Request Version",
+          "type": "integer"
+        },
+        "requester": {
+          "maxLength": 40,
+          "minLength": 1,
+          "title": "Requester",
+          "type": "string"
+        },
+        "requester_session": {
+          "maxLength": 40,
+          "title": "Requester Session",
+          "type": "string"
+        },
+        "run_id": {
+          "maxLength": 96,
+          "minLength": 1,
+          "title": "Run Id",
+          "type": "string"
+        },
+        "schema_version": {
+          "default": "1.0.0",
+          "title": "Schema Version",
+          "type": "string"
+        },
+        "time_domain": {
+          "$ref": "#/$defs/TimeDomain"
+        },
+        "zone_id": {
+          "maxLength": 40,
+          "minLength": 1,
+          "title": "Zone Id",
+          "type": "string"
+        }
+      },
+      "required": [
+        "run_id",
+        "epoch",
+        "zone_id",
+        "requester",
+        "requester_session",
+        "request_version",
+        "grant_id",
+        "occupancy_seq",
+        "release_seq",
+        "time_domain"
+      ],
+      "title": "ZoneReleaseBody",
+      "type": "object"
+    },
+    "ZoneRequestBody": {
+      "additionalProperties": false,
+      "description": "Request to acquire ``zone_id`` for protected movement ``movement``.",
+      "properties": {
+        "entry_pose": {
+          "maxItems": 3,
+          "minItems": 3,
+          "prefixItems": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "number"
+            },
+            {
+              "type": "number"
+            }
+          ],
+          "title": "Entry Pose",
+          "type": "array"
+        },
+        "epoch": {
+          "maxLength": 96,
+          "minLength": 1,
+          "title": "Epoch",
+          "type": "string"
+        },
+        "exit_pose": {
+          "maxItems": 3,
+          "minItems": 3,
+          "prefixItems": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "number"
+            },
+            {
+              "type": "number"
+            }
+          ],
+          "title": "Exit Pose",
+          "type": "array"
+        },
+        "expires_at_ns": {
+          "minimum": 0,
+          "title": "Expires At Ns",
+          "type": "integer"
+        },
+        "membership_digest": {
+          "maxLength": 64,
+          "title": "Membership Digest",
+          "type": "string"
+        },
+        "movement": {
+          "maxLength": 24,
+          "minLength": 1,
+          "title": "Movement",
+          "type": "string"
+        },
+        "protocol_version": {
+          "default": "1.0.0",
+          "title": "Protocol Version",
+          "type": "string"
+        },
+        "request_version": {
+          "minimum": 1,
+          "title": "Request Version",
+          "type": "integer"
+        },
+        "requester": {
+          "maxLength": 40,
+          "minLength": 1,
+          "title": "Requester",
+          "type": "string"
+        },
+        "requester_session": {
+          "maxLength": 40,
+          "title": "Requester Session",
+          "type": "string"
+        },
+        "run_id": {
+          "maxLength": 96,
+          "minLength": 1,
+          "title": "Run Id",
+          "type": "string"
+        },
+        "schema_version": {
+          "default": "1.0.0",
+          "title": "Schema Version",
+          "type": "string"
+        },
+        "time_domain": {
+          "$ref": "#/$defs/TimeDomain"
+        },
+        "zone_id": {
+          "maxLength": 40,
+          "minLength": 1,
+          "title": "Zone Id",
+          "type": "string"
+        }
+      },
+      "required": [
+        "run_id",
+        "epoch",
+        "zone_id",
+        "requester",
+        "requester_session",
+        "request_version",
+        "movement",
+        "entry_pose",
+        "exit_pose",
+        "expires_at_ns",
+        "time_domain",
+        "membership_digest"
+      ],
+      "title": "ZoneRequestBody",
+      "type": "object"
+    }
+  },
+  "$id": "https://niharamesh.local/schemas/PeerMessage.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "description": "A peer message: envelope plus exactly one typed body.\n\nDispatch on ``envelope.kind``. Bodies are stored as validated models (not\nraw dicts) so an unknown critical field is a validation error rather than a\nsilently dropped key.",
+  "properties": {
+    "body": {
+      "anyOf": [
+        {
+          "$ref": "#/$defs/ZoneRequestBody"
+        },
+        {
+          "$ref": "#/$defs/ZoneGrantBody"
+        },
+        {
+          "$ref": "#/$defs/ZoneCancelBody"
+        },
+        {
+          "$ref": "#/$defs/ZoneCancelAckBody"
+        },
+        {
+          "$ref": "#/$defs/ZoneOccupyBody"
+        },
+        {
+          "$ref": "#/$defs/ZoneReleaseBody"
+        },
+        {
+          "$ref": "#/$defs/ZoneFenceBody"
+        },
+        {
+          "$ref": "#/$defs/PeerState"
+        },
+        {
+          "$ref": "#/$defs/PeerIntent"
+        },
+        {
+          "$ref": "#/$defs/ObstructionReport"
+        },
+        {
+          "$ref": "#/$defs/Heartbeat"
+        }
+      ],
+      "title": "Body"
+    },
+    "body_kind": {
+      "maxLength": 32,
+      "minLength": 1,
+      "title": "Body Kind",
+      "type": "string"
+    },
+    "envelope": {
+      "$ref": "#/$defs/PeerEnvelope"
+    }
+  },
+  "required": [
+    "envelope",
+    "body",
+    "body_kind"
+  ],
+  "title": "PeerMessage",
+  "type": "object",
+  "x-niharamesh-version": "1.0.0"
+}

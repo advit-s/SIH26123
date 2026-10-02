@@ -1,0 +1,139 @@
+{
+  "$defs": {
+    "TimeDomain": {
+      "description": "Named clock domains. Values are never mixed across domains.\n\n``LOGICAL``\n    Injected logical simulation time. Freezes when the harness pauses and\n    advances under acceleration. Used by the deterministic mode.\n``SIM_SECONDS``\n    Simulation seconds elapsed since the declared common run start. Derived\n    from ``LOGICAL``; identical semantics, different unit framing.\n``MONOTONIC``\n    The agent's own ``time.monotonic_ns()``. Never comparable across\n    processes without an explicit measured offset *and* uncertainty.\n``DISPLAY_UTC``\n    Wall-clock UTC for human display only. Never used for expiry.",
+      "enum": [
+        "logical",
+        "sim_seconds",
+        "monotonic",
+        "display_utc"
+      ],
+      "title": "TimeDomain",
+      "type": "string"
+    }
+  },
+  "$id": "https://niharamesh.local/schemas/PeerState.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "description": "Published robot state. A claim, never ground truth.",
+  "properties": {
+    "battery_fraction": {
+      "anyOf": [
+        {
+          "maximum": 1.0,
+          "minimum": 0.0,
+          "type": "number"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Battery Fraction"
+    },
+    "battery_source": {
+      "default": "unavailable",
+      "maxLength": 16,
+      "title": "Battery Source",
+      "type": "string"
+    },
+    "carrying_task_id": {
+      "anyOf": [
+        {
+          "maxLength": 40,
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Carrying Task Id"
+    },
+    "pose": {
+      "maxItems": 3,
+      "minItems": 3,
+      "prefixItems": [
+        {
+          "type": "number"
+        },
+        {
+          "type": "number"
+        },
+        {
+          "type": "number"
+        }
+      ],
+      "title": "Pose",
+      "type": "array"
+    },
+    "robot_id": {
+      "maxLength": 40,
+      "minLength": 1,
+      "title": "Robot Id",
+      "type": "string"
+    },
+    "sent_at_ns": {
+      "minimum": 0,
+      "title": "Sent At Ns",
+      "type": "integer"
+    },
+    "seq": {
+      "minimum": 0,
+      "title": "Seq",
+      "type": "integer"
+    },
+    "session_id": {
+      "maxLength": 40,
+      "title": "Session Id",
+      "type": "string"
+    },
+    "stop_reason": {
+      "default": "none",
+      "maxLength": 32,
+      "title": "Stop Reason",
+      "type": "string"
+    },
+    "time_domain": {
+      "$ref": "#/$defs/TimeDomain"
+    },
+    "uncertainty_m": {
+      "minimum": 0.0,
+      "title": "Uncertainty M",
+      "type": "number"
+    },
+    "uncertainty_rad": {
+      "minimum": 0.0,
+      "title": "Uncertainty Rad",
+      "type": "number"
+    },
+    "velocity": {
+      "maxItems": 2,
+      "minItems": 2,
+      "prefixItems": [
+        {
+          "type": "number"
+        },
+        {
+          "type": "number"
+        }
+      ],
+      "title": "Velocity",
+      "type": "array"
+    }
+  },
+  "required": [
+    "robot_id",
+    "session_id",
+    "seq",
+    "pose",
+    "velocity",
+    "uncertainty_m",
+    "uncertainty_rad",
+    "sent_at_ns",
+    "time_domain"
+  ],
+  "title": "PeerState",
+  "type": "object",
+  "x-niharamesh-version": "1.0.0"
+}

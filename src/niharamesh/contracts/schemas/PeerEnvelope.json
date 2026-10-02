@@ -1,0 +1,87 @@
+{
+  "$defs": {
+    "TimeDomain": {
+      "description": "Named clock domains. Values are never mixed across domains.\n\n``LOGICAL``\n    Injected logical simulation time. Freezes when the harness pauses and\n    advances under acceleration. Used by the deterministic mode.\n``SIM_SECONDS``\n    Simulation seconds elapsed since the declared common run start. Derived\n    from ``LOGICAL``; identical semantics, different unit framing.\n``MONOTONIC``\n    The agent's own ``time.monotonic_ns()``. Never comparable across\n    processes without an explicit measured offset *and* uncertainty.\n``DISPLAY_UTC``\n    Wall-clock UTC for human display only. Never used for expiry.",
+      "enum": [
+        "logical",
+        "sim_seconds",
+        "monotonic",
+        "display_utc"
+      ],
+      "title": "TimeDomain",
+      "type": "string"
+    }
+  },
+  "$id": "https://niharamesh.local/schemas/PeerEnvelope.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "description": "Transport framing metadata. Present on every message, checked on receipt.",
+  "properties": {
+    "correlation_id": {
+      "default": "",
+      "maxLength": 64,
+      "title": "Correlation Id",
+      "type": "string"
+    },
+    "epoch": {
+      "maxLength": 96,
+      "minLength": 1,
+      "title": "Epoch",
+      "type": "string"
+    },
+    "kind": {
+      "maxLength": 32,
+      "minLength": 1,
+      "title": "Kind",
+      "type": "string"
+    },
+    "protocol_version": {
+      "default": "1.0.0",
+      "title": "Protocol Version",
+      "type": "string"
+    },
+    "run_id": {
+      "maxLength": 96,
+      "minLength": 1,
+      "title": "Run Id",
+      "type": "string"
+    },
+    "sender": {
+      "maxLength": 40,
+      "minLength": 1,
+      "title": "Sender",
+      "type": "string"
+    },
+    "sender_session": {
+      "maxLength": 40,
+      "title": "Sender Session",
+      "type": "string"
+    },
+    "sent_at_ns": {
+      "minimum": 0,
+      "title": "Sent At Ns",
+      "type": "integer"
+    },
+    "seq": {
+      "minimum": 0,
+      "title": "Seq",
+      "type": "integer"
+    },
+    "time_domain": {
+      "$ref": "#/$defs/TimeDomain"
+    }
+  },
+  "required": [
+    "kind",
+    "sender",
+    "sender_session",
+    "run_id",
+    "epoch",
+    "seq",
+    "sent_at_ns",
+    "time_domain"
+  ],
+  "title": "PeerEnvelope",
+  "type": "object",
+  "x-niharamesh-version": "1.0.0"
+}

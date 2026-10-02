@@ -1,0 +1,98 @@
+{
+  "$defs": {
+    "TimeDomain": {
+      "description": "Named clock domains. Values are never mixed across domains.\n\n``LOGICAL``\n    Injected logical simulation time. Freezes when the harness pauses and\n    advances under acceleration. Used by the deterministic mode.\n``SIM_SECONDS``\n    Simulation seconds elapsed since the declared common run start. Derived\n    from ``LOGICAL``; identical semantics, different unit framing.\n``MONOTONIC``\n    The agent's own ``time.monotonic_ns()``. Never comparable across\n    processes without an explicit measured offset *and* uncertainty.\n``DISPLAY_UTC``\n    Wall-clock UTC for human display only. Never used for expiry.",
+      "enum": [
+        "logical",
+        "sim_seconds",
+        "monotonic",
+        "display_utc"
+      ],
+      "title": "TimeDomain",
+      "type": "string"
+    }
+  },
+  "$id": "https://niharamesh.local/schemas/ObstructionReport.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "description": "Shared observation of an obstruction, with provenance and age.",
+  "properties": {
+    "confidence": {
+      "default": 0.8,
+      "maximum": 1.0,
+      "minimum": 0.0,
+      "title": "Confidence",
+      "type": "number"
+    },
+    "kind": {
+      "maxLength": 32,
+      "minLength": 1,
+      "title": "Kind",
+      "type": "string"
+    },
+    "observation_age_ns": {
+      "minimum": 0,
+      "title": "Observation Age Ns",
+      "type": "integer"
+    },
+    "observed_at_ns": {
+      "minimum": 0,
+      "title": "Observed At Ns",
+      "type": "integer"
+    },
+    "position": {
+      "maxItems": 2,
+      "minItems": 2,
+      "prefixItems": [
+        {
+          "type": "number"
+        },
+        {
+          "type": "number"
+        }
+      ],
+      "title": "Position",
+      "type": "array"
+    },
+    "robot_id": {
+      "maxLength": 40,
+      "minLength": 1,
+      "title": "Robot Id",
+      "type": "string"
+    },
+    "session_id": {
+      "maxLength": 40,
+      "title": "Session Id",
+      "type": "string"
+    },
+    "time_domain": {
+      "$ref": "#/$defs/TimeDomain"
+    },
+    "zone_id": {
+      "anyOf": [
+        {
+          "maxLength": 40,
+          "minLength": 1,
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Zone Id"
+    }
+  },
+  "required": [
+    "robot_id",
+    "session_id",
+    "position",
+    "kind",
+    "observation_age_ns",
+    "observed_at_ns",
+    "time_domain"
+  ],
+  "title": "ObstructionReport",
+  "type": "object",
+  "x-niharamesh-version": "1.0.0"
+}

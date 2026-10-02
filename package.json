@@ -1,0 +1,27 @@
+{
+  "name": "niharamesh",
+  "version": "0.1.0",
+  "private": true,
+  "description": "NĪHĀRAMESH - edge-AI distributed fleet coordination for warehouse AMRs (SIH26123)",
+  "packageManager": "pnpm@11.22.0",
+  "engines": {
+    "node": ">=22.12.0"
+  },
+  "scripts": {
+    "bootstrap": "node scripts/bootstrap.mjs",
+    "doctor": "node scripts/doctor.mjs",
+    "dev": "node scripts/dev.mjs",
+    "build": "pnpm --filter @niharamesh/web build",
+    "check": "node scripts/check.mjs",
+    "test": "node scripts/test.mjs",
+    "test:e2e": "pnpm --filter @niharamesh/web test:e2e",
+    "verify": "node scripts/verify.mjs",
+    "demo": "node scripts/demo.mjs",
+    "benchmark:smoke": "uv run nihara benchmark --suite scenarios/suites/smoke.json --output var/benchmarks/smoke",
+    "benchmark:full": "uv run nihara benchmark --suite scenarios/suites/main.json --output var/benchmarks/main"
+  },
+  "devDependencies": {
+    "@playwright/test": "1.49.1",
+    "typescript": "5.7.2"
+  }
+}

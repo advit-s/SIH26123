@@ -1,0 +1,212 @@
+{
+  "$defs": {
+    "Pose2": {
+      "additionalProperties": false,
+      "description": "Planar pose in metres/radians. Distinct from a *measured* pose estimate.",
+      "properties": {
+        "theta": {
+          "maximum": 1000000000.0,
+          "minimum": -1000000000.0,
+          "title": "Theta",
+          "type": "number"
+        },
+        "x": {
+          "maximum": 1000000000.0,
+          "minimum": -1000000000.0,
+          "title": "X",
+          "type": "number"
+        },
+        "y": {
+          "maximum": 1000000000.0,
+          "minimum": -1000000000.0,
+          "title": "Y",
+          "type": "number"
+        }
+      },
+      "required": [
+        "x",
+        "y",
+        "theta"
+      ],
+      "title": "Pose2",
+      "type": "object"
+    },
+    "ZoneMovement": {
+      "description": "The protected movement a zone authorises.\n\n``FWD``  - traverse along the zone's declared axis, either direction.\n``REV``  - traverse against the declared axis (used for one-way aisles).\n``CROSS``- cross the zone (intersections / junctions).",
+      "enum": [
+        "forward",
+        "reverse",
+        "cross"
+      ],
+      "title": "ZoneMovement",
+      "type": "string"
+    }
+  },
+  "$id": "https://niharamesh.local/schemas/Zone.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "description": "An exclusive resource with disjoint protected geometry.\n\nEvery exclusive zone's protected geometry must be **disjoint** from every\nother exclusive zone's. Where a traversal needs two adjacent resources with\nno safe berth between them, they must be authored as ONE compound zone\n(see ``members``), not as two zones a robot might partially hold.",
+  "properties": {
+    "allowed_movement": {
+      "default": [
+        "forward",
+        "cross"
+      ],
+      "items": {
+        "$ref": "#/$defs/ZoneMovement"
+      },
+      "title": "Allowed Movement",
+      "type": "array"
+    },
+    "description": {
+      "default": "",
+      "maxLength": 240,
+      "title": "Description",
+      "type": "string"
+    },
+    "entry_pose": {
+      "$ref": "#/$defs/Pose2"
+    },
+    "exit_berth_id": {
+      "anyOf": [
+        {
+          "maxLength": 40,
+          "minLength": 1,
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Exit Berth Id"
+    },
+    "exit_pose": {
+      "$ref": "#/$defs/Pose2"
+    },
+    "id": {
+      "maxLength": 40,
+      "minLength": 1,
+      "title": "Id",
+      "type": "string"
+    },
+    "kind": {
+      "default": "corridor",
+      "maxLength": 32,
+      "title": "Kind",
+      "type": "string"
+    },
+    "members": {
+      "default": [],
+      "items": {
+        "maxLength": 40,
+        "minLength": 1,
+        "type": "string"
+      },
+      "title": "Members",
+      "type": "array"
+    },
+    "one_way_heading_rad": {
+      "anyOf": [
+        {
+          "maximum": 1000000000.0,
+          "minimum": -1000000000.0,
+          "type": "number"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "One Way Heading Rad"
+    },
+    "protected_extent": {
+      "maxItems": 2,
+      "minItems": 2,
+      "prefixItems": [
+        {
+          "maximum": 1000000000.0,
+          "minimum": -1000000000.0,
+          "type": "number"
+        },
+        {
+          "maximum": 1000000000.0,
+          "minimum": -1000000000.0,
+          "type": "number"
+        }
+      ],
+      "title": "Protected Extent",
+      "type": "array"
+    },
+    "protected_origin": {
+      "maxItems": 2,
+      "minItems": 2,
+      "prefixItems": [
+        {
+          "maximum": 1000000000.0,
+          "minimum": -1000000000.0,
+          "type": "number"
+        },
+        {
+          "maximum": 1000000000.0,
+          "minimum": -1000000000.0,
+          "type": "number"
+        }
+      ],
+      "title": "Protected Origin",
+      "type": "array"
+    },
+    "queue_berth_id": {
+      "anyOf": [
+        {
+          "maxLength": 40,
+          "minLength": 1,
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Queue Berth Id"
+    },
+    "stop_line_in": {
+      "anyOf": [
+        {
+          "maxLength": 40,
+          "minLength": 1,
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Stop Line In"
+    },
+    "stop_line_out": {
+      "anyOf": [
+        {
+          "maxLength": 40,
+          "minLength": 1,
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Stop Line Out"
+    }
+  },
+  "required": [
+    "id",
+    "protected_origin",
+    "protected_extent",
+    "entry_pose",
+    "exit_pose"
+  ],
+  "title": "Zone",
+  "type": "object",
+  "x-niharamesh-version": "1.0.0"
+}

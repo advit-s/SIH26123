@@ -1,0 +1,63 @@
+{
+  "$id": "https://niharamesh.local/schemas/EnvironmentRecord.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "description": "What the run actually executed on. Recorded, never guessed.",
+  "properties": {
+    "accelerator": {
+      "default": "",
+      "title": "Accelerator",
+      "type": "string"
+    },
+    "cpu_count": {
+      "default": 0,
+      "title": "Cpu Count",
+      "type": "integer"
+    },
+    "cpu_model": {
+      "default": "",
+      "title": "Cpu Model",
+      "type": "string"
+    },
+    "docker": {
+      "default": false,
+      "title": "Docker",
+      "type": "boolean"
+    },
+    "machine": {
+      "title": "Machine",
+      "type": "string"
+    },
+    "os_name": {
+      "title": "Os Name",
+      "type": "string"
+    },
+    "os_version": {
+      "title": "Os Version",
+      "type": "string"
+    },
+    "python_version": {
+      "title": "Python Version",
+      "type": "string"
+    },
+    "wall_end_utc_ns": {
+      "default": 0,
+      "title": "Wall End Utc Ns",
+      "type": "integer"
+    },
+    "wall_start_utc_ns": {
+      "default": 0,
+      "title": "Wall Start Utc Ns",
+      "type": "integer"
+    }
+  },
+  "required": [
+    "os_name",
+    "os_version",
+    "machine",
+    "python_version"
+  ],
+  "title": "EnvironmentRecord",
+  "type": "object",
+  "x-niharamesh-version": "1.0.0"
+}

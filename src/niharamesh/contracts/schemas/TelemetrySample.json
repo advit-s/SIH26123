@@ -1,0 +1,84 @@
+{
+  "$id": "https://niharamesh.local/schemas/TelemetrySample.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "description": "Replaceable high-rate sample. Never an authority or evaluation record.",
+  "properties": {
+    "angular_radps": {
+      "title": "Angular Radps",
+      "type": "number"
+    },
+    "battery_fraction": {
+      "anyOf": [
+        {
+          "maximum": 1.05,
+          "minimum": -0.05,
+          "type": "number"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Battery Fraction"
+    },
+    "linear_mps": {
+      "title": "Linear Mps",
+      "type": "number"
+    },
+    "robot_id": {
+      "maxLength": 40,
+      "minLength": 1,
+      "title": "Robot Id",
+      "type": "string"
+    },
+    "run_id": {
+      "maxLength": 40,
+      "minLength": 1,
+      "title": "Run Id",
+      "type": "string"
+    },
+    "sample_index": {
+      "minimum": 0,
+      "title": "Sample Index",
+      "type": "integer"
+    },
+    "sim_time_s": {
+      "minimum": -1.0,
+      "title": "Sim Time S",
+      "type": "number"
+    },
+    "stop_reason": {
+      "default": "none",
+      "maxLength": 32,
+      "title": "Stop Reason",
+      "type": "string"
+    },
+    "theta": {
+      "title": "Theta",
+      "type": "number"
+    },
+    "x": {
+      "title": "X",
+      "type": "number"
+    },
+    "y": {
+      "title": "Y",
+      "type": "number"
+    }
+  },
+  "required": [
+    "run_id",
+    "robot_id",
+    "sample_index",
+    "sim_time_s",
+    "x",
+    "y",
+    "theta",
+    "linear_mps",
+    "angular_radps"
+  ],
+  "title": "TelemetrySample",
+  "type": "object",
+  "x-niharamesh-version": "1.0.0"
+}

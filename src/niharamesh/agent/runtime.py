@@ -28,11 +28,19 @@ from dataclasses import dataclass, field
 from enum import StrEnum
 
 from niharamesh.allocation.auction import LocalAuction
+from niharamesh.allocation.custody import CustodyLedger
 from niharamesh.clocks import Clock
 from niharamesh.coordination.protocol import ZoneProtocol
 from niharamesh.coordination.requester import AdmissionContext
 from niharamesh.domain.coordination import AcquisitionPhase, PeerMessage
-from niharamesh.domain.geometry import OrientedBox, Pose, aabb_overlap, bbox_of
+from niharamesh.domain.geometry import (
+    OrientedBox,
+    Pose,
+    aabb_overlap,
+    bbox_of,
+    centre_arc_lateral_m,
+    swept_body_bound,
+)
 from niharamesh.domain.identity import Membership, RobotIdentity, RobotSession
 from niharamesh.domain.map import Obstacle, Station, WarehouseMap
 from niharamesh.domain.pose import Footprint, MotionCommand, Pose2, StopReason
@@ -42,7 +50,7 @@ from niharamesh.domain.units import TimeDomain, wrap_angle
 from niharamesh.persistence.journal import SqliteAuthorityJournal
 from niharamesh.planning.astar import AStarPlanner, PathStatus
 from niharamesh.planning.grid import OccupancyGrid
-from niharamesh.ports import FreshnessVerdict, Observation, SafetyDecision
+from niharamesh.ports import ActuatorPort, FreshnessVerdict, Observation, SafetyDecision
 from niharamesh.safety.gate import GateContext, SafetyGate
 
 __all__ = [
@@ -65,6 +73,30 @@ AUTHORITY_PHASES: frozenset[AcquisitionPhase] = frozenset(
         AcquisitionPhase.GRANTED,
         AcquisitionPhase.OCCUPIED,
         AcquisitionPhase.RELEASING,
+    }
+)
+
+#: How many times :meth:`RobotAgent._limit_for_clearance` may halve the command
+#: before it gives up. Bounded so a robot can never spend a control period
+#: searching; eight halvings is a factor of 256 on speed and on turn rate.
+_GOVERNOR_HALVINGS = 8
+#: Below these the governor stops halving and reports nothing clearable, rather than
+#: creeping towards zero asymptotically.
+_GOVERNOR_FLOOR_MPS = 0.01
+_GOVERNOR_FLOOR_RADPS = 0.05
+
+#: Task states with no remaining destination. A delivered task is finished, not
+#: pending: keeping it as a goal made the robot re-service its own delivery.
+_TERMINAL_TASK_STATES: frozenset[TaskState] = frozenset({TaskState.DELIVERED, TaskState.ABANDONED})
+
+#: Acquisition phases after which the transaction is finished, so a fresh one may be
+#: opened for the same zone.
+_TERMINAL_ACQUISITION_PHASES: frozenset[AcquisitionPhase] = frozenset(
+    {
+        AcquisitionPhase.REJECTED,
+        AcquisitionPhase.CANCELLED,
+        AcquisitionPhase.RELEASED,
+        AcquisitionPhase.FAILED,
     }
 )
 
@@ -117,6 +149,25 @@ class TaskProgress:
     transitions: list[str] = field(default_factory=list)
 
 
+@dataclass(slots=True)
+class _Service:
+    """A station visit this robot has asked the world to perform.
+
+    The *timer* belongs to the world, which reports the physical fact. What the
+    visit is *for* -- pickup or delivery -- belongs to this robot, and is the reason
+    a completed service may not be mistaken for a completed task.
+    """
+
+    station_id: str
+    started_at_ns: int
+    duration_s: float
+    purpose: str
+
+    @property
+    def due_at_ns(self) -> int:
+        return self.started_at_ns + int(self.duration_s * 1e9)
+
+
 @dataclass(frozen=True, slots=True)
 class ZoneEvidence:
     """Exactly what this robot tells the safety gate about zones, and why.
@@ -161,6 +212,7 @@ class RobotAgent:
         membership: Membership,
         clock: Clock,
         run_id: str,
+        actuator: ActuatorPort | None = None,
         session_registry: Callable[[str], str | None] | None = None,
         journal_path: str | None = None,
     ) -> None:
@@ -170,6 +222,14 @@ class RobotAgent:
         self.membership = membership
         self.clock = clock
         self.run_id = run_id
+        #: This robot's only channel to the physical world. ``None`` in unit tests
+        #: that never leave the decision layer; a real run always supplies one, and
+        #: it is bound to *this* robot so no call can reach a peer.
+        self.actuator = actuator
+        #: Physical custody of the load this robot is carrying. Task *ownership* is
+        #: the auction's; this is possession, and the two are deliberately separate
+        #: so a crashed owner's task keeps custody instead of being handed on.
+        self.custody = CustodyLedger(run_id, membership.epoch)
 
         self.warehouse_map: WarehouseMap = scenario.map
         # An in-memory journal by default. A real process mode passes a durable
@@ -249,7 +309,12 @@ class RobotAgent:
         #: closed has to mean for a stall detector that must also recover.
         self._last_tick_ns: int | None = None
         self._control_loop_age_ns: int = 0
-        self._service_until_ns: int | None = None
+        #: True when the timestamp handed to this tick has gone *backwards* inside
+        #: the robot's own declared clock domain. That is a clock fault, not a
+        #: healthy loop, and it is reported as such rather than clamped to an age of
+        #: zero.
+        self._clock_fault = False
+        self._last_command_at_ns: int | None = None
         self._pending_peer_intents: dict[str, FreshnessVerdict] = {}
         self._peer_state_age: dict[str, float | None] = {}
         self._last_decision: SafetyDecision | None = None
@@ -260,12 +325,29 @@ class RobotAgent:
         #: ``tick``, so the evidence must be published *before* they are reached.
         self._latest_observation: Observation | None = None
         self.zone_evidence: ZoneEvidence | None = None
+        #: This robot's own record of the zone its body is physically inside, kept
+        #: independently of the transaction. See :meth:`authority_zone`.
+        self._local_occupancy: str | None = None
+        #: True once a declared release has reconciled at every voter. Only this may
+        #: drop :attr:`_local_occupancy`.
+        self._release_reconciled = False
         self.stop_reason: StopReason = StopReason.NONE
 
         fixed = scenario.start_of(identity.robot_id).assigned_task_id
         if fixed is not None:
             self.progress.task_id = fixed
             self.progress.state = TaskState.CLAIMED
+            # The scenario hands this robot a task outright. That is an *ownership*
+            # decision the scenario is entitled to make, so it is recorded as a
+            # claim here rather than being left as a private field the custody
+            # ledger has never heard of.
+            self.custody.record_claim(fixed, identity.robot_id, session.session_id)
+        #: Declared service in progress, if any: which station, and for how long.
+        self._service: _Service | None = None
+        #: Tasks this robot has delivered, in order. Completion credit is claimed
+        #: exactly once per task and the claim is recorded here too, so a duplicate
+        #: delivery cannot inflate the count.
+        self.completed_tasks: list[str] = []
 
     # ------------------------------------------------------------------ peer
 
@@ -294,7 +376,17 @@ class RobotAgent:
         # overwrites it. A live loop reports ~0 and is never falsely latched as
         # stalled; a loop that genuinely has not run for longer than the stall
         # bound reports that gap on its first tick back and fails closed once.
-        self._control_loop_age_ns = 0 if self._last_tick_ns is None else max(0, now - self._last_tick_ns)
+        #
+        # A *negative* gap is not clamped to zero. It means the timestamp handed to
+        # this tick has gone backwards inside this robot's own declared clock
+        # domain, which is a clock fault rather than a healthy loop -- and the only
+        # safe reading of an untrustworthy clock is that the loop cannot be *shown*
+        # to be live. Clamping it to zero reported "live" for a robot whose clock
+        # had demonstrably failed.
+        self._clock_fault = self._last_tick_ns is not None and now < self._last_tick_ns
+        self._control_loop_age_ns = (
+            0 if self._last_tick_ns is None or self._clock_fault else now - self._last_tick_ns
+        )
         self._last_tick_ns = now
         # Published before anything that can consult it: the coordinator's
         # admission callback is about to be reached.
@@ -307,15 +399,176 @@ class RobotAgent:
         self.auction.tick(now)
         self._advance_task_state(now)
 
-        decision = self._decide(observation, now)
-        command = self._to_command(observation, decision, now)
+        evidence = self.zone_evidence_for(observation)
+        self.zone_evidence = evidence
+        # Entry and release are physical declarations driven by this robot's own
+        # body, so they happen before the phase decision: a robot that has just
+        # crossed into the zone it holds must be recorded as occupying it, and one
+        # that has just cleared it must be allowed to let go.
+        self._update_zone_lifecycle(evidence)
+
+        decision = self._decide(observation, evidence, now)
+        command = self._to_command(observation, evidence, decision, now)
         self._last_decision = decision
         return command
 
+    # ------------------------------------------------------- zone lifecycle
+
+    def _update_zone_lifecycle(self, evidence: ZoneEvidence) -> None:
+        """Declare physical entry, and release only after real physical clearance.
+
+        Four rules, all from the robot's own geometry:
+
+        * **entry** is declared when this robot's own body is inside the protected
+          geometry of the zone it holds authority over. Not when it *intends* to go
+          there, and not when the grant arrives.
+        * **release** is declared only when that body has left the protected
+          geometry again. A release is a promise that the body will come out, so
+        * **local occupancy** is remembered independently of the transaction, and
+          cleared only when the body has physically left. This is what keeps a
+          cancellation arriving mid-crossing from making the robot abandon an aisle
+          its body is still in.
+        * **a release that has been reconciled** is the only thing that drops that
+          local record. Everything else -- a timeout, a lost heartbeat, a missing
+          acknowledgement -- leaves it standing. A timeout expires permission to
+          assume, never physical occupancy.
+
+        After a release the robot keeps its *retained authority* until the release
+        reconciles at every voter, so it can finish coasting out of the zone while
+        the next requester waits.
+        """
+        held = self.authority_zone()
+        if held is not None and evidence.occupied_zone == held:
+            self._local_occupancy = held
+
+        phase = self.coordinator.phase()
+        if phase is AcquisitionPhase.GRANTED and held is not None and evidence.occupied_zone == held:
+            self.coordinator.mark_entered(held)
+            return
+        if phase is AcquisitionPhase.OCCUPIED and held is not None and evidence.occupied_zone != held:
+            self.coordinator.release()
+        if (
+            phase is AcquisitionPhase.RELEASED
+            and self._local_occupancy is not None
+            and evidence.occupied_zone != self._local_occupancy
+        ):
+            # The body has physically left every protected region *and* the release
+            # has reconciled at every voter. That is the only pair of facts that may
+            # drop the local occupancy record. A timeout, a lost heartbeat or a
+            # missing acknowledgement expires permission to assume, never physical
+            # occupancy, so none of them appears here.
+            self._release_reconciled = True
+            self._local_occupancy = None
+        if (
+            phase is AcquisitionPhase.RELEASED
+            and self._local_occupancy is not None
+            and evidence.occupied_zone != self._local_occupancy
+        ):
+            self._release_reconciled = True
+            self._local_occupancy = None
+
+    # -------------------------------------------------------------- service
+
+    def _station_tolerance_m(self) -> float:
+        """How close counts as "at the station".
+
+        Derived from the shared map, which every agent legitimately holds, and the
+        same bound the world applies to its own service request. Declared in one
+        place on each side rather than two numbers that can drift.
+        """
+        return max(0.25, self.warehouse_map.nominal_aisle_width_m / 2.0)
+
+    def _at(self, pose: Pose2, station: Station) -> bool:
+        """True when this robot is standing at *station*.
+
+        Judged against **the station it is actually going to**, never against "a
+        station that happens to be nearby". Asking the looser question froze a robot
+        that had just picked up at ``stn-pick-a``: it was still standing at
+        ``stn-pick-a``, that counted as an arrival, it asked the world to service the
+        station 22 m away, the world refused, and it sat there for the rest of the run
+        with a 233-waypoint plan it never followed.
+        """
+        return math.hypot(station.pose.x - pose.x, station.pose.y - pose.y) <= self._station_tolerance_m()
+
     def _advance_task_state(self, now_ns: int) -> None:
-        if self._service_until_ns is not None and now_ns >= self._service_until_ns:
-            self._service_until_ns = None
-            self._transition(TaskState.DELIVERED if self.progress.carrying else TaskState.PICKUP_CONFIRMED)
+        """Complete a service the world has reported finished.
+
+        Neither a timer nor proximity is accepted as proof on its own. The world
+        reports that the robot stood at the station for the declared service time;
+        *this* robot then records the task transition, and the completion credit is
+        claimed exactly once however many times the world repeats the event.
+        """
+        if self._service is None or self.actuator is None:
+            return
+        if self.actuator.service_running() or now_ns < self._service.due_at_ns:
+            return
+        service, self._service = self._service, None
+        task_id = self.progress.task_id
+        if task_id is None:  # pragma: no cover - a service is only started for a task
+            return
+
+        if service.purpose == "pickup":
+            effect = self.custody.record_pickup(
+                task_id, self.identity.robot_id, self.session.session_id, service.due_at_ns
+            )
+            if not effect.applied:
+                self._note_refusal("pickup", effect)
+                return
+            # Leaving the pickup station is its own declared step. The task state
+            # machine has no ``PICKUP_CONFIRMED -> DELIVERED`` edge, and skipping it
+            # made every later delivery fail as an illegal transition -- the robot
+            # carried the load across the warehouse and could never complete.
+            departure = self.custody.record_departure(task_id, robot=self.identity.robot_id)
+            if not departure.applied:
+                self._note_refusal("departure", departure)
+                return
+            self.progress.carrying = True
+            self.progress.completion_credited = False
+            self._adopt_ledger_state(task_id, effect, departure)
+            self.why = WhyWaiting()
+            return
+
+        # Delivery. Custody first, then credit, then the ledger's own idempotent
+        # claim -- in that order, so a refused delivery cannot leave a credit behind
+        # and a duplicate delivery cannot mint a second one.
+        effect = self.custody.record_delivery(
+            task_id,
+            self.identity.robot_id,
+            self.session.session_id,
+            service.due_at_ns,
+        )
+        if not effect.applied:
+            self._note_refusal("delivery", effect)
+            return
+        self._adopt_ledger_state(task_id, effect)
+        if self.custody.completion_credit(task_id):
+            self.completed_tasks.append(task_id)
+            self.progress.completion_credited = True
+        self.why = WhyWaiting()
+
+    def _adopt_ledger_state(self, task_id: str, *effects: object) -> None:
+        """Take the task state from the custody ledger, which is the authority.
+
+        Two records of the same lifecycle is two ways to disagree. The ledger is
+        append-only, idempotent and durable; a private enum on the agent is not. The
+        agent's own field is therefore *derived*, and the local transition log is
+        kept only as the operator-facing audit trail.
+        """
+        previous = self.progress.state
+        self.progress.state = self.custody.task_state(task_id)
+        self.progress.transitions.append(f"{previous.value}->{self.progress.state.value}")
+        del effects  # accepted effects; the ledger is already up to date
+
+    def _note_refusal(self, step: str, effect: object) -> None:
+        """Report a refused custody step as the reason, never as a silent retry."""
+        violation = getattr(effect, "violation", None)
+        detail = getattr(effect, "detail", "")
+        self.progress.transitions.append(f"refused:{step}:{violation.value if violation else 'unknown'}")
+        self.why = WhyWaiting(
+            waiting=True,
+            reason=f"{step} refused: {violation.value if violation else 'unknown'}: {detail}",
+            recovery_condition="a supervisor resolves the custody record",
+        )
 
     def _transition(self, nxt: TaskState) -> None:
         if not is_legal_task_transition(self.progress.state, nxt):
@@ -326,16 +579,28 @@ class RobotAgent:
         self.progress.transitions.append(f"{self.progress.state.value}->{nxt.value}")
         self.progress.state = nxt
 
-    def _decide(self, observation: Observation, now_ns: int) -> SafetyDecision:
+    def _decide(self, observation: Observation, evidence: ZoneEvidence, now_ns: int) -> SafetyDecision:
         """Choose a phase and build the gate context. Pure decision, no motion."""
+        # The zone facts have already been published and acted on by the caller; they
+        # are read here to decide whether an outstanding grant is still needed.
         pose = observation.pose_estimate.pose
         station = self._next_station()
 
         if station is None:
+            self._abandon_unneeded_transaction(evidence)
             self.phase = AgentPhase.WAITING
             self.why = WhyWaiting(
                 waiting=True,
-                reason="no reachable task remains for this robot",
+                reason=(
+                    "no task is currently assigned to this robot"
+                    if self.progress.task_id is None
+                    else (
+                        f"task {self.progress.task_id} is {self.progress.state.value} "
+                        "and has no destination left"
+                        if self.progress.state in _TERMINAL_TASK_STATES
+                        else "no reachable destination for the task it holds"
+                    )
+                ),
                 recovery_condition="a new task is released and won in a later round",
             )
             return SafetyDecision(False, StopReason.SCHEDULED_STOP, "workload_complete_for_me")
@@ -365,6 +630,10 @@ class RobotAgent:
             self._goal = goal
 
         upcoming = self._next_zone_ahead(pose)
+        if upcoming is None:
+            # Nothing ahead needs a zone, so any transaction still open is being held
+            # for a reason that no longer exists.
+            self._abandon_unneeded_transaction(evidence)
         if upcoming is not None and not self._zone_authority_ok(upcoming):
             active = self.coordinator.requester.active
             if active is not None and active.zone_id != upcoming:
@@ -404,23 +673,104 @@ class RobotAgent:
             )
             return SafetyDecision(False, StopReason.ZONE_AUTHORITY_MISSING, f"awaiting:{upcoming}")
 
-        if self._service_until_ns is not None:
+        if self._service is not None:
             self.phase = AgentPhase.SERVICING
-            self.why = WhyWaiting()
+            self.why = WhyWaiting(
+                waiting=False,
+                reason=f"{self._service.purpose} service at {self._service.station_id}",
+                recovery_condition="the world reports the service complete",
+            )
             return SafetyDecision(False, StopReason.SCHEDULED_STOP, "servicing")
+
+        if self._at(pose, station):
+            return self._begin_service(station, now_ns)
 
         self.phase = AgentPhase.TRAVERSING
         self.why = WhyWaiting()
         return SafetyDecision(True, StopReason.NONE)
 
-    def _acquiring(self, zone_id: str) -> bool:
-        """True when this robot already has an outstanding transaction for *zone_id*.
+    def _abandon_unneeded_transaction(self, evidence: ZoneEvidence) -> None:
+        """Cancel an outstanding grant this robot no longer needs.
 
-        Read from the requester's own active acquisition rather than inferred from
-        a phase name, so the check cannot drift out of step with the protocol.
+        A promise kept after the reason for it has gone is a promise that starves
+        somebody else: the voter keeps the zone ``PROMISED``, the next requester is
+        refused, and the aisle stays held by a robot that is standing still with
+        nothing left to do. In ``three-way-junction`` that was amr-01: it delivered
+        its task, had no destination, and blocked amr-02's canonical walk for the
+        rest of the run on a grant it would never use.
+
+        Never cancels a zone this robot is **physically inside**, and never cancels a zone
+        it **holds authority** for. Releasing from inside would hand the aisle to
+        the next robot while this body is still in it, which is invariant 4 stated
+        backwards; that case is left to the ordinary clearance-then-release path,
+        which requires the body to be out first.
+
+        The authority guard is not optional. :meth:`_next_zone_ahead` deliberately
+        skips zones this robot already holds, so "nothing ahead needs a zone" is also
+        true of a robot that has just been granted the zone it is driving into --
+        and without the guard it cancelled its own grant on the very next tick, every
+        time, and the junction never cleared once.
         """
         active = self.coordinator.requester.active
-        return active is not None and active.zone_id == zone_id
+        if active is None or active.phase in _TERMINAL_ACQUISITION_PHASES:
+            return
+        if evidence.occupied_zone == active.zone_id:
+            return
+        if self._zone_authority_ok(active.zone_id):
+            return
+        self.coordinator.cancel(f"no zone remains ahead on this robot's plan; releasing {active.zone_id}")
+        self._zone_in_progress = None
+
+    def _begin_service(self, station: Station, now_ns: int) -> SafetyDecision:
+        """Ask the world to service this robot at *station*, and stand still for it.
+
+        The request is a request: the world refuses a robot that is not standing at
+        the station, and the refusal is reported as such rather than retried
+        silently. Service runs for the task's own declared service time, and this
+        robot holds still while the world runs the timer -- which is why a timer
+        started far from a station would prove nothing here.
+        """
+        if self.actuator is None:  # pragma: no cover - decision-layer-only construction
+            self.phase = AgentPhase.SERVICING
+            self.why = WhyWaiting(waiting=True, reason="no actuator channel is configured")
+            return SafetyDecision(False, StopReason.ACTUATOR_FAULT, "no_actuator_channel")
+
+        purpose = "delivery" if self.progress.carrying else "pickup"
+        task = self.progress.task_id
+        duration = self.scenario.task(task).service_time_s if task is not None else 0.0
+        if not self.actuator.start_service(station.id, duration):
+            self.phase = AgentPhase.WAITING
+            self.why = WhyWaiting(
+                waiting=True,
+                reason=f"the world refused {purpose} service at {station.id}",
+                recovery_condition="the robot drives clear and tries again",
+            )
+            return SafetyDecision(False, StopReason.SCHEDULED_STOP, "service_refused")
+
+        self._service = _Service(
+            station_id=station.id,
+            started_at_ns=now_ns,
+            duration_s=duration,
+            purpose=purpose,
+        )
+        self.phase = AgentPhase.SERVICING
+        self.why = WhyWaiting(waiting=False, reason=f"{purpose} service at {station.id}")
+        return SafetyDecision(False, StopReason.SCHEDULED_STOP, "servicing")
+
+    def _acquiring(self, zone_id: str) -> bool:
+        """True when this robot has a **live** transaction for *zone_id*.
+
+        Read from the requester's own active acquisition rather than inferred from
+        a phase name, so the check cannot drift out of step with the protocol -- but a
+        transaction that has already ended is not live. Matching on the zone id alone
+        meant that once a release settled, the finished acquisition still counted as
+        outstanding, the robot never asked again, and it queued for a zone it had
+        itself released for the rest of the run.
+        """
+        active = self.coordinator.requester.active
+        if active is None or active.zone_id != zone_id:
+            return False
+        return active.phase not in _TERMINAL_ACQUISITION_PHASES
 
     def authority_zone(self) -> str | None:
         """The zone whose authority this robot **retains**, if any.
@@ -431,11 +781,23 @@ class RobotAgent:
         false once the body is inside: "may I cross this boundary" and "am I
         responsible for this aisle" stop being the same question at the moment of
         entry, and collapsing them is how an occupied aisle gets quietly emptied.
+
+        It also survives the transaction being *cancelled* while the body is inside,
+        which is invariant 4's hard case. A late or duplicated grant arriving for a
+        ``GRANTED`` transaction moves it to ``CANCELLING`` at the requester, and the
+        voters drop their ``PROMISED`` records to ``FREE``. The peers' books may then
+        legitimately believe the aisle is free; this robot's body is still in it. The
+        only thing that can settle that disagreement is the robot's own geometry, so
+        this method falls back to its own record of physical occupancy and holds it
+        until the body has actually cleared. A cancellation the operator never made
+        must not be able to make a robot abandon an aisle it is standing in.
         """
         acq = self.coordinator.requester.active
-        if acq is None or acq.phase not in AUTHORITY_PHASES:
-            return None
-        return acq.zone_id
+        if acq is not None and acq.phase in AUTHORITY_PHASES:
+            return acq.zone_id
+        if self._local_occupancy is not None:
+            return self._local_occupancy
+        return None
 
     def entry_permission(self) -> str | None:
         """The zone for which complete, durable GRANTED entry permission is live.
@@ -464,6 +826,12 @@ class RobotAgent:
     def _next_station(self) -> Station | None:
         """Where this robot is trying to go right now, given its custody."""
         if self.progress.task_id is None:
+            return None
+        if self.progress.state in _TERMINAL_TASK_STATES:
+            # A delivered or abandoned task has no destination. Continuing to target
+            # it put a robot that had just delivered straight back into station
+            # service: it was still standing at the drop station, that counted as an
+            # arrival, and it serviced the same delivery for the rest of the run.
             return None
         task = self.scenario.task(self.progress.task_id)
         if self.progress.carrying:
@@ -498,14 +866,21 @@ class RobotAgent:
 
     # ------------------------------------------------------- zone evidence
 
-    def zone_evidence_for(self, observation: Observation) -> ZoneEvidence:
+    def zone_evidence_for(
+        self, observation: Observation, command: MotionCommand | None = None
+    ) -> ZoneEvidence:
         """The four zone facts this robot reports to the gate, and why.
 
         Built entirely from this robot's own pose estimate, its own footprint, its
-        own command budget and its own coordinator state. No peer pose, no
-        evaluator truth. :meth:`tick` fills the gate context from exactly this
-        object, so what an operator is shown and what the gate enforced are the
-        same statement.
+        own command and its own coordinator state. No peer pose, no evaluator truth.
+        :meth:`tick` fills the gate context from exactly this object, so what an
+        operator is shown and what the gate enforced are the same statement.
+
+        *command* is this tick's candidate command. It is honoured when supplied:
+        a witness that ignores the command is not a bound on that command, only on
+        some larger one, and relying on the shipped speed limits to supply the
+        difference made the witness conservative by accident rather than by
+        argument.
         """
         pose = observation.pose_estimate.pose
         body = self.identity.footprint.body_at(Pose(pose.x, pose.y, pose.theta))
@@ -525,9 +900,82 @@ class RobotAgent:
             occupied_zone=occupied,
             entry_permission=permission,
             zone_authority=authority,
-            swept_body=body.inflated(self._conservative_margin_m()),
+            swept_body=self._swept_body(observation, body, command),
             detail=detail,
         )
+
+    def _swept_body(
+        self,
+        observation: Observation,
+        body: OrientedBox,
+        command: MotionCommand | None,
+    ) -> OrientedBox:
+        """Everything this body can occupy before it has stopped.
+
+        Uses :func:`~niharamesh.domain.geometry.swept_body_bound`, the same formula
+        the gate uses for its obstacle witness, so the zone check and the obstacle
+        check are two readings of one bound instead of two guesses. The uncertainty
+        margin is added on top, because localisation error displaces the body in
+        every direction at once.
+        """
+        actuator = self.scenario.simulation.actuator
+        motion = observation.motion
+        if command is None:
+            speed, omega = actuator.max_linear_mps, actuator.max_angular_radps
+        else:
+            speed = max(abs(command.linear_mps), abs(motion.linear_velocity_mps))
+            omega = max(abs(command.angular_radps), abs(motion.angular_velocity_radps))
+        reach, spin, lateral = self._motion_budget(speed, omega)
+        swept = swept_body_bound(body, reach_m=reach, spin_rad=spin, lateral_m=lateral)
+        return swept.inflated(self._uncertainty_margin_m())
+
+    def _motion_budget(self, linear_mps: float, angular_radps: float) -> tuple[float, float, float]:
+        """``(reach_m, spin_rad, lateral_m)`` for a twist, from the declared models.
+
+        The same decomposition the gate uses, so the zone evidence and the obstacle
+        evidence are one bound rather than two guesses.
+        """
+        actuator = self.scenario.simulation.actuator
+        speed = abs(linear_mps)
+        rate = abs(angular_radps)
+        reach = speed * actuator.command_ttl_s + self._stopping_reach_m(speed)
+        spin = rate * actuator.command_ttl_s + (rate * rate) / (2.0 * actuator.angular_accel_radps2)
+        return reach, spin, centre_arc_lateral_m(speed, rate, spin)
+
+    def _limit_for_clearance(
+        self, body: OrientedBox, requested_v: float, requested_omega: float
+    ) -> tuple[float, float]:
+        """Reduce the commanded twist until its swept envelope clears static geometry.
+
+        The gate can only permit or refuse. Refusing a command whose *turn rate* is
+        the problem would leave a robot that must turn near a shelf unable to turn at
+        all -- it may not translate and may not steer, which is precisely the livelock
+        the pivot escape exists to avoid. So the rate is reduced here instead, which is
+        also what a real robot does: it slows down before it gets that close.
+
+        Speed is reduced first, because slowing is cheap and reversible and the
+        braking reach is quadratic in speed. The turn rate is only reduced once speed
+        is no longer the dominant term, since the corner sweep is what a tight aisle
+        actually costs.
+
+        Returns the largest twist, in at most a bounded number of halvings, whose swept
+        envelope does not touch static geometry. ``(0.0, 0.0)`` when nothing within the
+        budget clears, which is the honest answer for a boxed-in robot.
+        """
+        v, omega = requested_v, requested_omega
+        for _ in range(_GOVERNOR_HALVINGS):
+            reach, spin, lateral = self._motion_budget(v, omega)
+            if not self.gate.will_collide_obstacle(
+                swept_body_bound(body, reach_m=reach, spin_rad=spin, lateral_m=lateral), 0.0
+            ):
+                return v, omega
+            if abs(v) > _GOVERNOR_FLOOR_MPS:
+                v *= 0.5
+            elif abs(omega) > _GOVERNOR_FLOOR_RADPS:
+                omega *= 0.5
+            else:
+                break
+        return 0.0, 0.0
 
     def _occupied_zone(self, body: OrientedBox) -> str | None:
         """The zone whose protected geometry contains this body *right now*.
@@ -597,7 +1045,13 @@ class RobotAgent:
             return 0.0
         return (speed_mps * speed_mps) / (2.0 * decel)
 
-    def _to_command(self, observation: Observation, decision: SafetyDecision, now_ns: int) -> MotionCommand:
+    def _to_command(
+        self,
+        observation: Observation,
+        evidence: ZoneEvidence,
+        decision: SafetyDecision,
+        now_ns: int,
+    ) -> MotionCommand:
         """Turn a decision into a command, then let the gate have the last word."""
         pose = observation.pose_estimate.pose
         # Contract A3: the agent's own refusal is a decision, not advice. A robot
@@ -609,6 +1063,13 @@ class RobotAgent:
         # never been granted.
         requested_v, requested_omega = self._pursue(pose) if decision.permitted else (0.0, 0.0)
 
+        # Slow into the obstacle before refusing the motion. A command whose swept
+        # envelope would reach static geometry is a command to drive slower, not a
+        # command to stop: refusing it outright leaves a robot unable to both
+        # translate and steer near a shelf.
+        body = self.identity.footprint.body_at(Pose(pose.x, pose.y, pose.theta))
+        requested_v, requested_omega = self._limit_for_clearance(body, requested_v, requested_omega)
+
         candidate = MotionCommand(
             robot_id=self.identity.robot_id,
             command_seq=self._command_seq,
@@ -619,9 +1080,12 @@ class RobotAgent:
             time_domain=TimeDomain.LOGICAL,
         )
 
-        evidence = self.zone_evidence_for(observation)
+        # The witness is rebuilt for *this* command rather than reusing the one the
+        # phase decision published: a body envelope that ignores the command is not
+        # a bound on that command.
+        evidence = self.zone_evidence_for(observation, candidate)
         self.zone_evidence = evidence
-        context = self._gate_context(observation, evidence, now_ns, candidate)
+        context = self._gate_context(observation, evidence, now_ns)
 
         # A stop is still a command and still has to be attributable, so it is
         # offered to the gate even when the agent produced it.
@@ -646,7 +1110,7 @@ class RobotAgent:
         # turn, so it stays pointed at the shelf forever. So the pivot is offered to
         # the gate as its own command and gets its own decision.
         pivot = candidate.model_copy(update={"linear_mps": 0.0, "angular_radps": requested_omega})
-        pivot_context = self._gate_context(observation, evidence, now_ns, pivot)
+        pivot_context = self._gate_context(observation, evidence, now_ns)
         pivot_verdict = self.gate.evaluate(pivot, now_ns, pivot_context)
         self._last_gate_decision = pivot_verdict if pivot_verdict.permitted else final
         self.stop_reason = final.reason
@@ -659,10 +1123,8 @@ class RobotAgent:
         observation: Observation,
         evidence: ZoneEvidence,
         now_ns: int,
-        command: MotionCommand,
     ) -> GateContext:
         """Assemble everything the gate is allowed to know, and nothing else."""
-        del command  # the gate receives the command as its first argument
         return GateContext(
             observation=observation,
             now_ns=now_ns,
@@ -774,9 +1236,20 @@ class RobotAgent:
         gap = self.gate.nearest_obstacle_m(body)
         budget = self.scenario.simulation.stopping.total_distance_m
         if gap is not None and gap < budget:
-            return False, (
-                f"only {gap:.3f} m of static clearance at this pose, "
-                f"and the declared stopping budget is {budget:.3f} m"
+            # Deliberately *not* a refusal. An earlier version refused here, and a
+            # robot with less clearance than the stopping budget then could not move
+            # to improve its clearance -- the gate refused every command, so the pose
+            # never improved, so admission kept refusing. A livelock with no escape.
+            #
+            # Current clearance is not this callback's question: it is a per-tick
+            # question the safety gate already answers every tick. Admission answers
+            # the separate question of whether the *zone's own declared traversal*
+            # can be completed safely once inside, which is the part the localiser
+            # cannot re-plan around after the fact.
+            return True, (
+                f"entry into {context.zone_id} is clear on the map; current static "
+                f"clearance is {gap:.3f} m against a {budget:.3f} m budget, which the "
+                "per-tick gate enforces separately"
             )
         return True, f"local evidence admits entry into {context.zone_id}"
 

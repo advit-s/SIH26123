@@ -68,7 +68,14 @@ import math
 from dataclasses import dataclass, field
 
 from niharamesh.domain.config import SimulationConfig
-from niharamesh.domain.geometry import OrientedBox, aabb_overlap, bbox_of, sat_overlap
+from niharamesh.domain.geometry import (
+    OrientedBox,
+    aabb_overlap,
+    bbox_of,
+    centre_arc_lateral_m,
+    sat_overlap,
+    swept_body_bound,
+)
 from niharamesh.domain.map import WarehouseMap
 from niharamesh.domain.pose import MotionCommand, StopReason
 from niharamesh.ports import FreshnessVerdict, Observation, SafetyDecision
@@ -295,30 +302,46 @@ class SafetyGate:
         Two exact tests on this robot's own body, both against the shared static map:
 
         1. the body must not overlap static geometry;
-        2. the body translated along its commanded travel by its declared stopping
-           reach -- and widened by the arc a corner sweeps while turning over the
-           command's TTL -- must not overlap static geometry either.
+        2. the **entire swept volume** of the body under this command must not
+           overlap static geometry either -- translation *and* rotation together,
+           including the coast the actuator performs after the command expires.
+
+        Test 2 uses :func:`~niharamesh.domain.geometry.swept_body_bound`, the same
+        formula the agent runtime uses for its zone evidence, so the two cannot
+        disagree about where a body can get to.
+
+        An earlier version of this check translated a *single* box along the initial
+        heading and widened it by the corner arc of ``min(pi, omega * ttl)``. That is
+        not a bound on anything: for a differential drive translating and rotating
+        together the centre follows an arc, so the lateral component fell entirely
+        outside the witness, and the spin-down after expiry was ignored. An
+        independent review drove the real agent, gate, kinematics and map and
+        measured a real command the gate permitted driving **44 mm into a shelf**.
 
         A *measured* clearance may be supplied through
         :attr:`GateContext.obstacle_distance_m`, and is then compared against the
         declared stopping budget as well. That field must be a clearance **ahead of
         this robot, from its own sensing**. Feeding it an all-direction nearest
         obstacle instead mixed a longitudinal budget with a lateral clearance and
-        froze two of three robots in a 1.4 m aisle: a shelf 0.26 m away *beside* a
-        robot driving parallel to it is not a stopping hazard, because braking is
-        longitudinal. The caller owns that measurement; the gate only says what it
-        means.
+        froze two of three robots in a 1.4 m aisle. It is a supplementary check, not
+        a substitute for test 2: a shelf beside a robot is lateral evidence and
+        correctly reads as far away.
         """
         body = ctx.occupied_box
         if body is not None:
             if self._overlaps_static(body):
                 return SafetyDecision(False, StopReason.OBSTACLE_IN_PATH, "body_overlaps_static")
-            swept = self._forward_swept(body, command, ctx)
-            if self._overlaps_static(swept):
+            reach, spin = self._motion_budget(command, ctx)
+            lateral = centre_arc_lateral_m(
+                max(abs(command.linear_mps), abs(ctx.observation.motion.linear_velocity_mps)),
+                max(abs(command.angular_radps), abs(ctx.observation.motion.angular_velocity_radps)),
+                spin,
+            )
+            if self._overlaps_static(swept_body_bound(body, reach_m=reach, spin_rad=spin, lateral_m=lateral)):
                 return SafetyDecision(
                     False,
                     StopReason.OBSTACLE_IN_PATH,
-                    f"stopping_reach_{self._stopping_reach_m(command, ctx):.3f}m_reaches_static",
+                    f"swept_reach_{reach:.3f}m_spin_{spin:.2f}rad_reaches_static",
                 )
 
         clearance = self._obstacle_margin_m
@@ -333,28 +356,28 @@ class SafetyGate:
     def _overlaps_static(self, box: OrientedBox) -> bool:
         return any(sat_overlap(box, obstacle) for obstacle in self._map_obstacles())
 
-    def _stopping_reach_m(self, command: MotionCommand, ctx: GateContext) -> float:
-        """How far this command could carry the body before it has stopped.
+    def _motion_budget(self, command: MotionCommand, ctx: GateContext) -> tuple[float, float]:
+        """``(reach_m, spin_rad)`` available over this command's whole horizon.
 
-        Travel under the command for its own TTL, plus the analytic braking reach
-        ``v**2 / (2a)`` that follows when the command expires and the watchdog takes
-        over. The *larger* of the commanded and the measured speed is used, because a
-        robot coasting faster than it was asked to is still coasting.
+        Translation: travel under the command for its TTL, plus the analytic braking
+        reach ``v**2 / (2a)`` that follows when the command expires and the watchdog
+        takes over.
+
+        Rotation: ``omega * ttl`` while the command holds, plus ``omega**2 / (2a)``
+        for the spin-down afterwards. The second term is not a refinement -- the
+        actuator keeps rotating while it coasts, and omitting it made the witness
+        smaller than the motion it was supposed to bound.
+
+        The *larger* of commanded and measured rates is used in both cases: a robot
+        coasting faster than it was asked to is still coasting.
         """
         actuator = self._config.actuator
-        speed = max(abs(command.linear_mps), abs(ctx.observation.motion.linear_velocity_mps))
-        return speed * actuator.command_ttl_s + (speed * speed) / (2.0 * actuator.decel_mps2)
-
-    def _forward_swept(self, body: OrientedBox, command: MotionCommand, ctx: GateContext) -> OrientedBox:
-        """The body translated forward by its stopping reach, widened by its turn."""
-        actuator = self._config.actuator
-        reach = self._stopping_reach_m(command, ctx)
-        omega = max(abs(command.angular_radps), abs(ctx.observation.motion.angular_velocity_radps))
-        spin = min(math.pi, omega * actuator.command_ttl_s)
-        corner = body.radius * (1.0 - math.cos(spin))
-        nx = body.cx + reach * math.cos(body.theta)
-        ny = body.cy + reach * math.sin(body.theta)
-        return OrientedBox(nx, ny, body.theta, body.length, body.width).inflated(corner)
+        motion = ctx.observation.motion
+        speed = max(abs(command.linear_mps), abs(motion.linear_velocity_mps))
+        omega = max(abs(command.angular_radps), abs(motion.angular_velocity_radps))
+        reach = speed * actuator.command_ttl_s + (speed * speed) / (2.0 * actuator.decel_mps2)
+        spin = omega * actuator.command_ttl_s + (omega * omega) / (2.0 * actuator.angular_accel_radps2)
+        return reach, spin
 
     def _zone_evidence_refusal(self, command: MotionCommand, ctx: GateContext) -> SafetyDecision | None:
         """The zone-evidence check, or ``None`` when the geometry is admissible.

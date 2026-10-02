@@ -128,6 +128,8 @@ def build_manifest(
             "disable_safety_gate": scenario.simulation.features.disable_safety_gate,
             "unsafe_research_variant": scenario.simulation.features.unsafe_research_variant,
         },
+        simulated_actuation_enabled=scenario.simulation.simulated_actuation_enabled,
+        physical_actuation_enabled=scenario.simulation.physical_actuation_enabled,
         seed=seed,
         robot_ids=tuple(r.robot_id for r in scenario.robots),
         task_count=len(scenario.tasks),

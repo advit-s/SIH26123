@@ -76,6 +76,44 @@ class HarnessResult:
     events: list[dict[str, object]] = field(default_factory=list)
 
 
+class _RobotActuator:
+    """One robot's outward channel, bound to that robot at construction.
+
+    The binding is the point: an agent physically cannot reach the world on a
+    peer's behalf, because there is no argument through which it could name one.
+    Every method here is a *physical* fact about one body -- a command the gate has
+    permitted, a station visit, a payload on the deck. None of them grants
+    authority, awards work, or reads another robot's state.
+    """
+
+    __slots__ = ("_robot_id", "_world")
+
+    def __init__(self, robot_id: str, world: World) -> None:
+        self._robot_id = robot_id
+        self._world = world
+
+    def apply_command(self, command: MotionCommand) -> bool:
+        if command.robot_id != self._robot_id:
+            return False
+        return self._world.apply_command(command)
+
+    def start_service(self, station_id: str, duration_s: float) -> bool:
+        return self._world.begin_service(self._robot_id, station_id, duration_s)
+
+    def service_running(self) -> bool:
+        """True while this robot's station visit is still in progress.
+
+        Reads the world's *level* query, not its completion *event*. The event is
+        edge-triggered and cleared at the start of every step, so a caller polling it
+        once per control period reads "not servicing" from the tick after the visit
+        finished -- which would let a robot re-enter a station it had already left.
+        """
+        return self._world.is_servicing(self._robot_id)
+
+    def take_payload(self, task_id: str) -> bool:
+        return self._world.attach_payload(self._robot_id, task_id)
+
+
 class DeterministicHarness:
     """Owns the world, the agents, and the inbox exchange between them."""
 
@@ -111,6 +149,7 @@ class DeterministicHarness:
                 membership=self.membership,
                 clock=self.clock,
                 run_id=run_id,
+                actuator=_RobotActuator(identity.robot_id, self.world),
                 # The harness owns the run's session table. Admission needs it so a
                 # request from a superseded boot is refused rather than merged.
                 session_registry=lambda peer: sessions.get(peer),
@@ -121,13 +160,16 @@ class DeterministicHarness:
         self._events: list[dict[str, object]] = []
         self._seq = 0
         self._faults_applied: set[str] = set()
+        self._credited: set[tuple[str, str]] = set()
+        #: Which zone each robot is currently physically inside, so entry is an
+        #: edge-triggered event rather than a state that repeats every tick.
+        self._entered: dict[str, str | None] = dict.fromkeys(self.agents)
 
     # ------------------------------------------------------------------ loop
 
     def run(self, *, max_sim_time_s: float | None = None) -> HarnessResult:
         """Advance the world until the deadline or the workload finishes."""
         deadline = max_sim_time_s if max_sim_time_s is not None else self.scenario.max_sim_time_s
-        completed = 0
         required = len(self.scenario.tasks)
 
         while self.clock.now_s() < deadline:
@@ -145,19 +187,50 @@ class DeterministicHarness:
                         trace.stopped_for[key] = trace.stopped_for.get(key, 0) + 1
                         trace.gate_vetoes += 1
                     self.world.apply_command(command)
-                    self._publish(robot_id, now_ns, command)
+                    self._collect_completions(robot_id, agent, now_ns)
+                    self._collect_zone_events(robot_id, agent, now_ns)
 
                 self._drain_outboxes()
                 self._deliver()
                 self.world.step(self.scenario.simulation.dt_s)
                 self.clock.advance_seconds(self.scenario.simulation.dt_s)
-                completed = sum(len(t.tasks_completed) for t in self.traces.values())
-                if required and completed >= required:
+                if required and self._completed_count() >= required:
                     break
-            if required and completed >= required:
+            if required and self._completed_count() >= required:
                 break
 
         return self._result()
+
+    def _completed_count(self) -> int:
+        """Distinct tasks holding a completion credit across the whole fleet."""
+        return len({task for _, task in self._credited})
+
+    def _collect_completions(self, robot_id: str, agent: RobotAgent, now_ns: int) -> None:
+        """Record completion credits the agent's own ledger granted, exactly once.
+
+        Derived from the custody ledger rather than from a state comparison, because
+        a credit is the only thing in the system that means "this task is done", and
+        because a ledger that refuses a duplicate can be relied on to make a second
+        entry impossible. The harness cannot grant one.
+        """
+        for task_id in agent.completed_tasks:
+            key = (robot_id, task_id)
+            if key in self._credited:
+                continue
+            self._credited.add(key)
+            self.traces[robot_id].tasks_completed.append(task_id)
+            self._record("task_completed", task_id, now_ns, robot_id=robot_id)
+
+    def _collect_zone_events(self, robot_id: str, agent: RobotAgent, now_ns: int) -> None:
+        """Record zone entry and release from the agent's own declarations."""
+        evidence = agent.zone_evidence
+        if evidence is None:
+            return
+        occupied = evidence.occupied_zone
+        if occupied is not None and occupied != self._entered.get(robot_id):
+            self._entered[robot_id] = occupied
+            self.traces[robot_id].zones_entered.append(occupied)
+            self._record("zone_occupied", occupied, now_ns, robot_id=robot_id)
 
     # --------------------------------------------------------------- plumbing
 

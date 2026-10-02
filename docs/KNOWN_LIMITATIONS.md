@@ -178,7 +178,64 @@ flag is set.
 
 ---
 
-## 12. Honest reporting rules this project holds itself to
+---
+
+## 12. The three-process network test is intermittently red, and its root cause is not known
+
+**Not true:** that `tests/network/test_three_process_peers.py` passes reliably.
+
+Measured in this checkout, 2026-10-02:
+
+- `test_three_process_peers_talk_directly` in isolation: **22 consecutive passes, 0
+  failures** (10 whole-file runs plus 14 single-test runs).
+- Within the **full** Python suite: **1 failure in 3 runs**, on the assertion that a
+  cut robot's link to the *survivor* reports `status == "healthy"`.
+
+The observed value at failure:
+
+```text
+{'availability': 'unavailable', 'connect_attempts': 1, 'connected': False,
+ 'dialed_from_port': 0, 'status': 'disconnected'}
+```
+
+`connect_attempts: 1` with `connected: False` means the outbound link had completed
+its **first and only** dial attempt. `PeerLink.run` retries with capped backoff, so a
+single attempt implies the reconnect loop had not re-entered when the sample was
+taken — either the socket was still attached while the health model judged the link
+unavailable, or the loop was inside `_read_loop` and therefore not reconnecting.
+
+**An attempted fix was reverted, and the reason is recorded because getting it wrong
+is the interesting part.** The test's own comment claims it waits on an observable
+"cut is live" condition before sampling; the code does not, it sleeps `_PHASE_S`.
+Adding that wait made the failure *consistent* (8 of 10 runs) instead of intermittent
+and moved it to a different robot. The original was a load-dependent race; the wait
+changed the sampling instant to a point where the link is genuinely still settling,
+and this checkout contains no evidence about which of those states is correct.
+Guessing would have produced a test that passes for the wrong reason, so the change
+was reverted and the flake is recorded here instead.
+
+**What would change this:** reading how `health.peers[*].status` and `availability`
+are derived in `transport/peer.py` and `transport/faults.py`, and establishing
+whether link availability is meant to survive a partition that silences only *other*
+peers. Until then this test's result is reported as observed, not smoothed over.
+
+---
+
+## 13. No scenario completes a task
+
+**Not true:** that any authored scenario currently delivers a payload.
+
+Measured 2026-10-02 at a 150 s budget across all seven library scenarios: every one
+returns `incomplete`. `three-way-junction` showed amr-02 holding `zn-junction` and
+amr-03 correctly starving behind it, because no robot declared zone entry or release
+and no task was bound through the auction. Station service, custody and completion
+credit were unwired at the time of that measurement.
+
+This is Milestone B work in progress, recorded so no earlier status line is read as a
+claim of end-to-end capability. A stationary fleet is not a demonstration of
+collision avoidance, and a run that reports `incomplete` is the correct report for it.
+
+## 14. Honest reporting rules this project holds itself to
 
 These are the mechanisms that keep the items above from quietly becoming false:
 

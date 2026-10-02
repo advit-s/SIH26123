@@ -462,8 +462,24 @@ class World:
         otherwise always see ``False`` and could never observe the event. The flag
         is cleared at the start of every step, which makes the event edge-triggered
         and exactly-once: polling twice in a row reports ``True`` then ``False``.
+
+        Because it is an **edge**, it cannot be used to ask "is this robot still
+        being serviced?". A caller that polls once per control period and misses the
+        edge sees ``False`` forever. Use :meth:`is_servicing` for the level.
         """
         return robot_id in self._completed_this_step
+
+    def is_servicing(self, robot_id: str) -> bool:
+        """True while this robot has an unfinished station visit.
+
+        The level query, and the only one safe to poll. Asking for the edge and
+        treating ``False`` as "not servicing" reports a robot as idle from the tick
+        after its service finished, which is how a completed visit was silently
+        re-entered and the robot ended up asking the world to service a station it
+        had already left.
+        """
+        state = self._robots.get(robot_id)
+        return state is not None and state.service is not None
 
     def attach_payload(self, robot_id: str, task_id: str) -> bool:
         """Give a robot custody of a load. Physical custody, not logical ownership."""

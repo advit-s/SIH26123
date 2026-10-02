@@ -21,6 +21,83 @@ from dataclasses import dataclass
 
 from niharamesh.domain.units import require_finite, wrap_angle
 
+
+def swept_body_bound(
+    body: OrientedBox,
+    *,
+    reach_m: float,
+    spin_rad: float,
+    lateral_m: float = 0.0,
+) -> OrientedBox:
+    """A **conservative** envelope of everything *body* can occupy over one command.
+
+    One formula, shared by the safety gate and the agent runtime, because two
+    implementations of "the swept body" is how a gate ends up permitting a path its
+    own planner believed was blocked.
+
+    Three components, each bounded separately rather than lumped together:
+
+    * **translation** along the body's own heading. A differential drive does not
+      move sideways, so the envelope is *elongated* along ``body.theta`` rather than
+      inflated in every direction. Inflating isotropically is sound but costs real
+      throughput: a robot driving straight down a 1.4 m aisle would need 0.26 m of
+      clearance to either side for a motion that can only go forwards, and would be
+      refused for wanting to drive.
+    * **rotation about the centre**. Every point of a rigid body stays within
+      :attr:`OrientedBox.radius` of the centre, because rotation preserves radius, and
+      a point at radius ``r`` rotating through ``spin_rad`` travels an arc of length
+      ``r * spin_rad``. This one *is* isotropic.
+    * **the arc of the centre itself.** Translating and rotating together puts the
+      centre on an arc of radius ``v / omega``, and that arc deviates from the
+      straight elongation by ``R (1 - cos(spin/2))``. It is small -- 27 mm at the
+      declared maximum rates -- but it is not zero, so it is passed in explicitly
+      rather than assumed away.
+
+    :param reach_m: total translation available: travel under the command for its
+        TTL, plus the analytic braking reach ``v**2 / (2a)`` that follows when the
+        command expires and the watchdog takes over.
+    :param spin_rad: total rotation available over the same horizon, **including**
+        the spin-down after the command expires. An earlier version bounded this by
+        ``omega * ttl`` alone, which under-counted by ``omega**2 / (2 * alpha)`` --
+        the actuator keeps rotating while it coasts, so a bounding box that ignored
+        that was not a bound. An earlier version of that version translated a single
+        box along the *initial* heading with no rotation term at all, which a review
+        drove end to end and found permitted a command that carried the chassis
+        44 mm into a shelf.
+    :param lateral_m: the centre-arc deviation described above. ``0.0`` is only
+        correct when the robot is not turning.
+
+    The result still over-covers the diagonal. That is the correct direction: a false
+    refusal costs throughput and is visible in the metrics, while a false permission
+    is not recoverable.
+    """
+    if reach_m < 0.0:
+        raise ValueError("reach_m must be non-negative")
+    if spin_rad < 0.0:
+        raise ValueError("spin_rad must be non-negative")
+    if lateral_m < 0.0:
+        raise ValueError("lateral_m must be non-negative")
+    # Elongate along the heading by the full reach, centred half-way along it.
+    nx = body.cx + 0.5 * reach_m * math.cos(body.theta)
+    ny = body.cy + 0.5 * reach_m * math.sin(body.theta)
+    elongated = OrientedBox(nx, ny, body.theta, body.length + 2.0 * reach_m, body.width)
+    # Then the isotropic part: the corner arc, plus any centre-arc deviation.
+    return elongated.inflated(body.radius * spin_rad + lateral_m)
+
+
+def centre_arc_lateral_m(linear_mps: float, angular_radps: float, spin_rad: float) -> float:
+    """Lateral deviation of a turning body's centre from a straight translation.
+
+    The centre follows an arc of radius ``v / |omega|``; over a total turn of
+    ``spin_rad`` it departs from the chord by ``R (1 - cos(spin / 2))``. Zero when
+    the robot is going straight, which is the common case.
+    """
+    if angular_radps == 0.0 or spin_rad <= 0.0:
+        return 0.0
+    radius = abs(linear_mps) / abs(angular_radps)
+    return radius * (1.0 - math.cos(min(math.pi, spin_rad) / 2.0))
+
+
 __all__ = [
     "OrientedBox",
     "Polygon",
@@ -30,6 +107,7 @@ __all__ = [
     "aabb_overlap",
     "bbox_of",
     "box_corners",
+    "centre_arc_lateral_m",
     "circle_rect_overlap",
     "point_in_polygon",
     "rotate",
@@ -37,6 +115,7 @@ __all__ = [
     "sat_penetration",
     "segment_intersects_segment",
     "segment_point_distance",
+    "swept_body_bound",
 ]
 
 Vec2 = tuple[float, float]
@@ -53,9 +132,7 @@ class Pose:
     def __post_init__(self) -> None:
         require_finite(self.x, field="pose.x")
         require_finite(self.y, field="pose.y")
-        object.__setattr__(
-            self, "theta", wrap_angle(require_finite(self.theta, field="pose.theta"))
-        )
+        object.__setattr__(self, "theta", wrap_angle(require_finite(self.theta, field="pose.theta")))
 
     def translated(self, dx: float, dy: float) -> Pose:
         return Pose(self.x + dx, self.y + dy, self.theta)
@@ -88,9 +165,7 @@ class OrientedBox:
         require_finite(self.length, field="obb.length")
         require_finite(self.width, field="obb.width")
         if self.length <= 0.0 or self.width <= 0.0:
-            raise ValueError(
-                f"OrientedBox extents must be positive, got {self.length}x{self.width}"
-            )
+            raise ValueError(f"OrientedBox extents must be positive, got {self.length}x{self.width}")
 
     @property
     def half_length(self) -> float:
@@ -111,9 +186,7 @@ class OrientedBox:
     def inflated(self, margin: float) -> OrientedBox:
         if margin < 0.0:
             raise ValueError("inflation margin must be non-negative")
-        return OrientedBox(
-            self.cx, self.cy, self.theta, self.length + 2 * margin, self.width + 2 * margin
-        )
+        return OrientedBox(self.cx, self.cy, self.theta, self.length + 2 * margin, self.width + 2 * margin)
 
     def corners(self) -> tuple[Vec2, Vec2, Vec2, Vec2]:
         """Corner points counter-clockwise starting at ``(+half_length, +half_width)``."""
@@ -176,9 +249,7 @@ def bbox_of(box: OrientedBox) -> tuple[float, float, float, float]:
     return (box.cx - ex, box.cy - ey, box.cx + ex, box.cy + ey)
 
 
-def aabb_overlap(
-    a: tuple[float, float, float, float], b: tuple[float, float, float, float]
-) -> bool:
+def aabb_overlap(a: tuple[float, float, float, float], b: tuple[float, float, float, float]) -> bool:
     """Touching counts as overlap - we are testing safety, not nice graphics."""
     return not (a[2] < b[0] or b[2] < a[0] or a[3] < b[1] or b[3] < a[1])
 
@@ -241,9 +312,7 @@ def point_in_polygon(px: float, py: float, points: Iterable[Vec2]) -> bool:
     return inside
 
 
-def segment_point_distance(
-    ax: float, ay: float, bx: float, by: float, px: float, py: float
-) -> float:
+def segment_point_distance(ax: float, ay: float, bx: float, by: float, px: float, py: float) -> float:
     vx, vy = bx - ax, by - ay
     wx, wy = px - ax, py - ay
     denom = vx * vx + vy * vy

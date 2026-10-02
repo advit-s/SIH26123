@@ -147,6 +147,11 @@
       "title": "Notes",
       "type": "string"
     },
+    "physical_actuation_enabled": {
+      "default": false,
+      "title": "Physical Actuation Enabled",
+      "type": "boolean"
+    },
     "robot_ids": {
       "default": [],
       "items": {
@@ -193,6 +198,11 @@
       "minimum": 0,
       "title": "Seed",
       "type": "integer"
+    },
+    "simulated_actuation_enabled": {
+      "default": true,
+      "title": "Simulated Actuation Enabled",
+      "type": "boolean"
     },
     "source_dirty": {
       "default": true,

@@ -33,6 +33,7 @@ from niharamesh.domain.pose import (
 from niharamesh.domain.scenario import ScenarioSnapshot
 
 __all__ = [
+    "ActuatorPort",
     "AuthorityJournal",
     "FreshnessVerdict",
     "Observation",
@@ -262,9 +263,7 @@ class ObservationSink(Protocol):
     decision authority.
     """
 
-    def emit(
-        self, event_type: str, source: str, payload: dict[str, object], **kw: object
-    ) -> None: ...
+    def emit(self, event_type: str, source: str, payload: dict[str, object], **kw: object) -> None: ...
 
     def health(self) -> dict[str, object]: ...
 
@@ -317,6 +316,38 @@ class FreshnessVerdict:
     def __repr__(self) -> str:
         age = "unknown" if self.age_ns is None else f"{self.age_ns / 1e9:.3f}s"
         return f"FreshnessVerdict({self.freshness.value}, age={age}, reason={self.reason!r})"
+
+
+@runtime_checkable
+class ActuatorPort(Protocol):
+    """One robot's only channel *outward* to the physical world.
+
+    The implementation is bound to exactly one ``robot_id`` at construction, so a
+    robot cannot reach the world on a peer's behalf even by accident. That binding
+    is the point: it removes the possibility rather than relying on every call site
+    to remember the rule.
+
+    What belongs here and what does not:
+
+    * **belongs** -- applying a command the safety gate has already permitted,
+      starting and polling this robot's own station service, and taking or putting
+      down *this* robot's own payload. All three are physical facts about one body.
+    * **does not belong** -- task ownership, completion credit, zone authority, or
+      anything that reads another robot's state. Those belong to the auction, the
+      custody ledger and the coordinator respectively.
+
+    The world still decides the physical facts: it refuses service for a robot that
+    is not standing at the station, and it refuses a payload for a robot already
+    carrying one. A request is a request.
+    """
+
+    def apply_command(self, command: MotionCommand) -> bool: ...
+
+    def start_service(self, station_id: str, duration_s: float) -> bool: ...
+
+    def service_running(self) -> bool: ...
+
+    def take_payload(self, task_id: str) -> bool: ...
 
 
 @runtime_checkable

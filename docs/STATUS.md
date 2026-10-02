@@ -75,6 +75,61 @@ and that is Milestone B's work:
 
 A zero collision count is not a safety proof and no makespan has been measured.
 The 20 % improvement target remains **unmeasured**.
+## Milestone B — task and zone lifecycles
+
+**Implemented and verified.** 	hree-way-junction, 250 s budget, measured:
+
+`	ext
+outcome incomplete   dur 250.0
+   amr-01 done ['t-junction-0']   amr-02 zones ['zn-junction']   amr-03 zones ['zn-junction']
+   amr-01 waiting  task delivered  completion_credited True
+events: zone_occupied x2, task_completed('t-junction-0')
+`
+
+One robot completes a real pickup-and-delivery with **exactly one** completion
+credit, derived from real custody events. Two robots enter and clear the junction
+through the canonical protocol. The run is still incomplete because the other two
+tasks do not finish inside the budget, which is a throughput finding, not a safety
+one. Findings 20-27 are written up with root causes in docs/CONTINUE.md.
+
+### Independent review of Milestone A, and what it changed
+
+A read-only reviewer audited 492bfd and **reproduced its central finding against
+the real agent, gate, kinematics and map**: the swept-volume witness was not a bound,
+and a genuine command was permitted that carried the chassis **44 mm into a shelf**.
+
+- The witness is now a real bound, decomposed into translation along the heading,
+  the isotropic corner arc, and the deviation of the turning centre's own path --
+  and it counts the spin-down after the command expires, which the actuator really
+  performs.
+- 	ests/integration/test_swept_volume_bound.py closes the gap that let it through:
+  it **integrates the physics** and checks every intermediate pose against the
+  independent collision predicate, instead of comparing two boxes. It sweeps ten
+  combined translate-and-rotate commands over 120 body placements.
+- The review also found a cancellation arriving mid-crossing could free an aisle its
+  holder was still standing in (invariant 4). The runtime now keeps its **own** record
+  of physical occupancy, independent of the transaction, and a cancellation cannot
+  make a robot abandon an aisle its body is in.
+- Its drift findings are closed: both actuation switches are now RunManifest
+  fields, so an artefact can distinguish a simulated run from one that energised a
+  hardware drive train.
+
+One coordination/requester.py change was made outside the integration owner's
+files and is **awaiting independent protocol review**. It is named in docs/CONTINUE.md
+as the first review item.
+
+### Still open
+
+- dynamic-arrivals and infeasible-layout have no task bound through the auction.
+- The harness publishes no peer_state, so may_enter never suspends in
+  deterministic mode and every harness test asserts a weaker property than process
+  mode gives.
+- The three-process network test is intermittently red under full-suite load;
+  measured and recorded in docs/KNOWN_LIMITATIONS.md item 12 rather than smoothed
+  over.
+- Milestones C-G are untouched: no API server, no replay reducer, no evaluation
+  module, no benchmark suites, no ROS 2, no Docker.
+- **The 20 % makespan target remains unmeasured.** No paired experiment has been run.
 
 ## Environment (recorded, verified)
 

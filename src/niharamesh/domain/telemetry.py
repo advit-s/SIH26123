@@ -253,6 +253,17 @@ class RunManifest(_Frozen):
     routing_policy: str
     comparison_mode: str
     feature_flags: dict[str, bool] = Field(default_factory=dict)
+    #: The two actuation switches, recorded separately because they answer different
+    #: questions and because an artefact that omitted them could not tell a
+    #: simulated run from one that energised a real drive train.
+    #:
+    #: ``simulated_actuation_enabled`` is a physics question -- may the declared
+    #: actuator model integrate accepted commands. ``physical_actuation_enabled`` is
+    #: a hardware-boundary question -- may a command reach a real drive train. The
+    #: cockpit reads the second one and renders a warning band, so this field is a
+    #: safety signal on the artefact, not a formality.
+    simulated_actuation_enabled: bool = True
+    physical_actuation_enabled: bool = False
     seed: Annotated[int, Field(ge=0, le=2**31 - 1)]
     robot_ids: tuple[RobotId, ...] = ()
     task_count: int = Field(ge=0)
@@ -318,9 +329,7 @@ class MetricValue(_Frozen):
         if self.availability is MetricAvailability.MEASURED and self.value is None:
             raise ValueError(f"metric {self.key!r} marked measured without a value")
         if self.availability is not MetricAvailability.MEASURED and self.value is not None:
-            raise ValueError(
-                f"metric {self.key!r} marked {self.availability} must not carry a value"
-            )
+            raise ValueError(f"metric {self.key!r} marked {self.availability} must not carry a value")
         return self
 
     @classmethod
@@ -407,9 +416,7 @@ class ReplayIndex(_Frozen):
 
     @model_validator(mode="after")
     def _index_consistent(self) -> Self:
-        expected_complete = not any(
-            not g.recovered and g.category in DURABLE_CATEGORIES for g in self.gaps
-        )
+        expected_complete = not any(not g.recovered and g.category in DURABLE_CATEGORIES for g in self.gaps)
         if self.complete and not expected_complete:
             raise ValueError("replay marked complete despite an unrecovered durable gap")
         return self

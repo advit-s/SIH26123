@@ -84,7 +84,8 @@ def test_a_refused_decision_produces_a_stop_command_not_a_pursuit_command(
     agent = fleet.agents[CONTENDER]
     observation = fleet.world.observe(CONTENDER)
 
-    decision = agent._decide(observation, observation.sim_time_ns)
+    evidence = agent.zone_evidence_for(observation)
+    decision = agent._decide(observation, evidence, observation.sim_time_ns)
     assert not decision.permitted, "precondition: this robot must be refusing"
     assert decision.reason is StopReason.ZONE_AUTHORITY_MISSING
     assert agent.phase is AgentPhase.QUEUED_FOR_ZONE
@@ -541,49 +542,55 @@ def test_a_turning_robot_may_not_swing_a_corner_into_a_shelf(
     """Rotation is physical motion too, and the gate has to know it.
 
     This is what makes the pivot escape below safe: if the swept corner were ignored,
-    letting a refused command keep steering would be a way to crash.
+    letting a refused command keep steering would be a way to crash. The bound counts
+    the spin-down *after* the command expires as well, because the actuator keeps
+    rotating while it coasts.
     """
     gate = fleet.agents[TRAVELLER].gate
     tight = OrientedBox(20.0, 2.30, 0.0, 0.6, 0.4)  # y 2.10..2.50, shelf starts at 2.6
 
     assert _judge_obstacles(gate, tight, linear=0.0, angular=0.0).permitted
     assert _judge_obstacles(gate, tight, linear=0.0, angular=0.2).permitted, (
-        "a 0.08 rad swing moves the corner about a millimetre; it is not a hazard"
+        "0.14 rad of swing moves the corner about 4 mm; it is not a hazard"
     )
-    assert not _judge_obstacles(gate, tight, linear=0.0, angular=3.0).permitted, (
-        "a 1.2 rad swing moves the corner 0.23 m, straight into the shelf"
+    assert not _judge_obstacles(gate, tight, linear=0.0, angular=1.0).permitted, (
+        "0.73 rad of swing moves the corner 0.26 m, straight into the shelf"
     )
 
 
-def test_a_veto_brakes_but_does_not_strand_the_steering(fleet: DeterministicHarness) -> None:
-    """A refused command must still be able to turn the robot away.
-
-    Zeroing both linear *and* angular velocity on a veto produced a livelock: a robot
-    pointed at a shelf it could not reverse away from was forbidden to translate,
-    forbidden to steer, and therefore stuck pointing at the shelf for the rest of the
-    run. Braking is longitudinal; the pivot is offered to the gate as its own command
-    and gets its own decision.
-    """
-    agent = fleet.agents[UNHURRIED]
-    aimed = _observation_at(fleet.world.observe(UNHURRIED), x=20.0, y=2.14, theta=math.pi / 2.0, stopped=True)
-    # A waypoint 0.5 m away at bearing theta+0.6 rad, which makes pure pursuit ask for
-    # v = 0.4 m/s (the declared maximum) *and* omega = 1.0 rad/s. Both are needed:
-    # only a near-maximum speed puts the stopping reach inside the shelf ahead, and
-    # only a heading error makes the robot want to steer.
-    target = (20.0 + 0.5 * math.cos(math.pi / 2 + 0.6), 2.14 + 0.5 * math.sin(math.pi / 2 + 0.6))
-    agent.plan = (target,)
-
-    result = agent.tick(aimed)
-
-    assert result.linear_mps == 0.0, "translation into the shelf must be refused"
-    assert abs(result.angular_radps) > 0.0, "and the robot must still be able to steer away"
-    assert agent.stop_reason is StopReason.OBSTACLE_IN_PATH
+# ===========================================================================
+# Slowing in, not stopping dead. The governor exists because the gate can only
+# permit or refuse, and refusing outright used to freeze robots.
+# ===========================================================================
 
 
-def test_a_veto_that_is_also_unsafe_to_turn_stops_the_robot_completely(
+def test_the_robot_slows_into_a_constriction_instead_of_stopping_dead(
     fleet: DeterministicHarness,
 ) -> None:
-    """If even the pivot is unsafe, nothing moves at all."""
+    """A command that is too fast becomes a slower command, not a refused one.
+
+    Refusing outright was the original defect: the robot may not translate, may not
+    steer, and is stuck. Reducing the *command* keeps it moving, which is what a real
+    robot does when it approaches something it cannot clear at full speed.
+    """
+    agent = fleet.agents[UNHURRIED]
+    # `shelf-30` spans x 18.8..22.0, y 2.6..6.2. Heading +x along the shelf face, the
+    # full-speed stopping reach carries the body from 18.7 to 18.96 -- into it.
+    tight = _observation_at(fleet.world.observe(UNHURRIED), x=18.4, y=4.4, theta=0.0, stopped=True)
+    agent.plan = ((22.0, 4.4),)
+
+    result = agent.tick(tight)
+    assert 0.0 < result.linear_mps < 0.4, f"the robot must creep rather than stop, got v={result.linear_mps}"
+    assert agent.stop_reason is StopReason.NONE
+
+
+def test_a_robot_with_nowhere_to_go_stops_completely(fleet: DeterministicHarness) -> None:
+    """When even a crawl would touch geometry, nothing moves.
+
+    The governor's floor is declared rather than asymptotic, so a boxed-in robot
+    reaches ``(0.0, 0.0)`` in a bounded number of halvings instead of creeping
+    toward zero forever. Here the body is already overlapping ``shelf-00``.
+    """
     agent = fleet.agents[UNHURRIED]
     boxed_in = _observation_at(fleet.world.observe(UNHURRIED), x=6.6, y=4.4, theta=0.0, stopped=True)
     agent.plan = ((8.0, 4.4),)
@@ -592,6 +599,29 @@ def test_a_veto_that_is_also_unsafe_to_turn_stops_the_robot_completely(
     assert result.linear_mps == 0.0
     assert result.angular_radps == 0.0
     assert agent.stop_reason is StopReason.OBSTACLE_IN_PATH
+
+
+def test_the_governor_is_bounded(fleet: DeterministicHarness) -> None:
+    """A control period may not be spent searching for a clearable command."""
+    agent = fleet.agents[UNHURRIED]
+    observation = fleet.world.observe(UNHURRIED)
+    body = agent.identity.footprint.body_at(
+        Pose(observation.pose_estimate.pose.x, observation.pose_estimate.pose.y, 0.0)
+    )
+    start = (0.4, 1.0)
+    result = agent._limit_for_clearance(body, *start)
+    v, omega = result
+    assert 0.0 <= v <= start[0]
+    assert abs(omega) <= start[1]
+    assert (v, omega) == start, (
+        "a body clear of every obstacle must pass through untouched -- the governor "
+        "is a constraint, not a habit"
+    )
+
+
+# ===========================================================================
+# Defect found while running the fix: the obstacle gap is a false measurement.
+# ===========================================================================
 
 
 def test_one_outstanding_grant_per_robot_globally_is_respected_by_the_runtime() -> None:
@@ -618,7 +648,8 @@ def test_one_outstanding_grant_per_robot_globally_is_respected_by_the_runtime() 
         agent.plan = ((other.protected_bounds[0], other.protected_bounds[1]),) * 2
 
         observation = harness.world.observe(agent.identity.robot_id)
-        decision = agent._decide(observation, observation.sim_time_ns)
+        evidence = agent.zone_evidence_for(observation)
+        decision = agent._decide(observation, evidence, observation.sim_time_ns)
 
         assert not decision.permitted
         assert decision.limiting_constraint == f"busy_holding:{held}"

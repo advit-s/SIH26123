@@ -414,7 +414,19 @@ class ZoneRequester:
         actions: list[ProtocolAction] = []
         # Reconciliation with peers outlives the phase change: a cancellation is
         # only finished when every peer that ever granted us has acknowledged.
-        if acq.durably_non_executable and acq.phase is not AcquisitionPhase.RELEASING:
+        #
+        # A **rejected** attempt needs the same treatment, and its absence here was
+        # a livelock rather than a leak. The protocol deliberately retries with a
+        # fresh ``request_version`` (see :meth:`retry_due`), so a voter still holding
+        # a promise from the failed attempt refuses the retry with ``ZONE_PROMISED``
+        # -- for the *same zone, by the same robot*. The promise can never match the
+        # new version, so the retry can never succeed, and the aisle stays held
+        # forever by a robot that has already given up. Withdrawing the partial
+        # promises of a failed attempt is safe precisely because the attempt never
+        # reached ``GRANTED``, so nobody could have entered on it.
+        if acq.phase is AcquisitionPhase.REJECTED or (
+            acq.durably_non_executable and acq.phase is not AcquisitionPhase.RELEASING
+        ):
             for voter in self.cancel_targets(acq):
                 acq.cancel_sent.add(voter)
                 actions.append(ProtocolAction("cancel", voter, cancel=self.cancel_body(acq)))

@@ -1,114 +1,160 @@
-# ADR 0002 — Canonical sequential acquisition for exclusive zones
+# ADR 0002 — Canonical sequential acquisition of exclusive zones
 
-**Status:** Accepted · **Date:** 2026-10-02
-**Supersedes:** nothing · **Superseded by:** nothing
+- Status: **accepted**
+- Date: 2026-10-02
+- Decides: the algorithm for obtaining exclusive authority over a warehouse zone
+- Spec: [`docs/protocol/ZONE_PROTOCOL.md`](../protocol/ZONE_PROTOCOL.md)
+- Team: NihāraNetra · Problem SIH26123
 
 ## Context
 
-Warehouse aisles admit one robot. A robot therefore needs an explicit, durable right
-to traverse a passage before it moves, and every peer must be able to see that right
-so nobody enters against someone else.
+Warehouse AMRs must not enter a narrow aisle or a junction while another robot is
+inside it. Every robot therefore needs exclusive authority over a *zone* before
+it crosses the zone's stop line, and the decision must be made without a central
+coordinator: the project brief forbids "a centralized MAPF solver run in the
+backend and described as decentralized robot planning", and `AGENTS.md` invariant 1
+forbids the API from coordinating at all.
 
-The specification is explicit about the trap:
+The brief also carries an explicit warning that shaped this decision:
 
-> *"Do not implement an incomplete broadcast-grant protocol and assume total priority
-> order fixes it. Concurrent requests can split durable grants across peers so no
-> robot can enter."*
+> *"Do not implement an incomplete broadcast-grant protocol and assume total
+> priority order fixes it. Concurrent requests can split durable grants across
+> peers so no robot can enter."*
 
-A naive broadcast design has every robot simultaneously solicit every other robot.
-With two concurrent requests R1 and R2 over zone Z, R1 may obtain a grant from peer A
-while R2 obtains one from peer B. Neither has the complete set, so **neither may
-enter**, and if A and B each hold a promise the deadlock is permanent without a
-recovery mechanism. A total priority order does not help: priority governs *who goes
-first*, not *who has collected a complete, non-conflicting set*.
+So the requirements are:
+
+1. no central arbiter;
+2. no state in which two robots believe they may enter the same zone;
+3. no state in which two robots each hold part of a grant set and neither can
+   enter - the "split grant" failure;
+4. a promise must survive the death of the process that made it;
+5. a lost heartbeat must not empty an aisle;
+6. every important decision must be inspectable and explainable.
 
 ## Decision
 
-**Canonical sequential acquisition**, plus the single-outstanding-grant rule
-([ADR 0003](0003-single-outstanding-grant.md)).
+**Canonical sequential acquisition.** The admitted peer set comes from
+`Membership`; canonical order is ascending `robot_id`. Every requester acquires
+**every** voter, including its own local voter, in that one global order, one
+outstanding solicitation at a time.
 
-1. The admitted peer set is frozen per run epoch, with a **canonical order**:
-   ascending `robot_id`. Every requester uses *the same* order.
-2. A requester solicits voters **one at a time in that order**, waiting for each
-   grant before asking the next.
-3. The requester acquires **every** voter, **including its own local voter**, in its
-   canonical position. It never pre-reserves its own grant.
-4. A grant identifies `(run, epoch, zone, requester, requester_session,
-   request_version)`. Any mismatch means the grant is for a different transaction
-   and is refused, never coalesced.
-5. The promise is **persisted before it is acknowledged**.
-6. Entry requires the exact complete grant set, the requester's own still-live local
-   state, durable commitment, current local safety checks, and no conflicting
-   obligation it already holds.
-7. `required_set_digest` must equal the owner-computed digest. A mismatch means
-   entry is withheld.
-8. Pre-entry cancellation is **durable at the owner first**, then reconciled with
-   peers. A late grant can never revive a cancelled request.
+Three properties follow immediately, and together they are the whole safety
+argument:
 
-## Why canonical order is what removes the deadlock
+- **Single serialisation point.** Every walk starts at canonical index zero. That
+  voter owes at most one promise per zone, so at most one requester can ever hold
+  a partial set for that zone. Two robots cannot both hold a complete set,
+  because a complete set contains index zero.
+- **No split grant.** Since only one requester can hold index zero, no second
+  requester can obtain *any* later index for the same zone. A requester that is
+  refused holds nothing at all.
+- **Durable, restorable promises.** Every voter journals the promise before
+  acknowledging it, so a reboot restores the record instead of forgetting it and
+  resuming to vote.
 
-Two properties, and both are needed:
+The requester's own voter is **not** privileged. For the robot at canonical index
+zero it happens to be `slot[0]`, handled in-process by the same `ZoneVoter.solicit`
+code with the same checks, the same journal append and the same refusal reasons.
+There is no `pre-reserve your own grant first` branch anywhere in the
+implementation, and
+`tests/protocol/test_split_grant.py::test_every_walk_starts_at_canonical_index_zero_including_the_self_voter`
+asserts that the walk order is literally `membership.order()` for every requester.
 
-**A global total order admits no circular wait.** Because every requester walks
-voters in the same order, two concurrent requests can never be "each waiting for a
-voter the other already holds" in a cycle. At least one is always strictly ahead.
-Contrast broadcast grant, where each holds a *different* subset and the cycle
-closes.
+## Alternatives considered
 
-**Including the requester's own voter closes the split.** Pre-reserving your own
-grant is the specific mistake that recreates the cycle: R1 holds its own voter,
-R2 holds its own, and each waits for the other's — an irreducible deadlock. Treating
-the local voter as one more position in the order removes that case by construction.
+### A1 — Broadcast grant (all voters answer every request)
+
+*Rejected.* This is the failure the brief names. With a broadcast, two robots can
+each receive a partial set, and with a total priority order the loser refuses to
+release, so **no robot can enter**. Adding a total order on top does not fix it:
+the loser's promise is already durable, and revoking it would break the durability
+guarantee that makes the protocol safe at all. Rejected on the brief's own
+grounds.
+
+### A2 — Ricart–Agrawala with timestamps
+
+*Rejected, and deliberately not renamed.* Its deadlock-freedom argument depends on
+a shared total order over requests and on deferring only to *earlier* requests; a
+requester holding the token must not be starved out by later arrivals. That is a
+genuine algorithm, but it grants CS permission to **all** members rather than
+demanding every member's promise, so a robot whose voter is partitioned can be
+blocked by an absent peer with no explicit "who is holding what" record. It also
+requires a queue per process whose ordering is only as good as the timestamp
+comparison, and it does not by itself give the per-zone durable occupancy record
+this project needs for conservative retention. Naming a custom mixture of it was
+explicitly ruled out.
+
+### A3 — Token / lock service per zone (a designated holder)
+
+*Rejected.* Safe and simple, but it puts the authority decision in one process,
+which contradicts invariant 1 and turns a single robot failure into a single-zone
+outage. It also has to be replicated to be useful, which is a different
+distributed-systems problem with its own failure modes.
+
+### A4 — Total-priority-order bakery algorithm (Lamport)
+
+*Rejected.* Lamport's bakery gives mutual exclusion with a *shared* ordering
+computed from every process's latest choosing number. It requires every process to
+maintain state for every other process, and choosing a number requires reading
+everyone's state - i.e. a broadcast per acquisition. It is also a mutual-exclusion
+primitive, not a durable, restartable, zone-scoped authority: after a crash the
+bakery state is gone and must be reconstructed, and the "holder" has no durable
+record that a peer could have relied on.
+
+### A5 — Two-phase locking, zones ordered globally
+
+*Rejected.* Requires a global order over *all* resources, not just zones, and
+holds locks across the whole traversal. Two robots each holding disjoint zones
+would still block each other. It also has no natural place for the durable
+occupancy record.
+
+### A6 — Quorum / majority grant
+
+*Rejected on safety grounds.* A majority vote is not physical clearance. A quorum
+of 2 of 3 can grant a zone while the third robot is physically inside it.
 
 ## Consequences
 
-**Accepted costs, stated rather than hidden:**
+**Good**
 
-- **Serialisation.** Every acquisition is a round trip per voter. With N peers this
-  is N sequential exchanges, so acquisition latency grows linearly with N. Measured,
-  not asserted — see `docs/BENCHMARKS.md`.
-- **Throughput bound.** [ADR 0003](0003-single-outstanding-grant.md) means a robot
-  can hold only one grant globally. A traversal needing two adjacent resources with
-  no berth between must be authored as **one compound zone**.
-- **Availability, not safety, is the exposed dimension.** Safety holds under
-  partitions, crashes, loss and reordering. What degrades is how many robots are
-  moving at once.
+- Split grants are unreachable among conforming requesters, and the argument is
+  three sentences long enough to audit.
+- Every refusal is explicit and carries a `RejectionReason`; a requester never has
+  to guess whether silence meant refusal or partition.
+- Every promise is durable before it is acknowledged, so a reboot never forgets
+  one.
+- Occupancy retention and fencing compose naturally: the record that makes a zone
+  `OCCUPIED` is the same record that a fence terminates.
+- Deadlock-freedom follows from the canonical order plus one outstanding grant per
+  robot (ADR 0003), so there is no deadlock detector in the motion path.
 
-## Alternatives rejected
+**Bad, and stated rather than hidden**
 
-| Alternative | Why rejected |
-|---|---|
-| **Broadcast grant + total priority** | Split grants with no entry path. Explicitly called out by the brief. |
-| **Pre-reserve own grant, then broadcast** | Recreates the two-holder cycle through the local voters. |
-| **PIBT / priority inheritance** | Yields *within* a tick; confers no inter-tick exclusion. Cannot express durable authority. Research also records that PIBT's deadlock-freedom does not extend to dead-end topologies, which warehouse aisles are. |
-| **Consensus-based (CBFA-style) consensus** | Heavier than needed for N ≈ 3–8; adds phases without removing the grant-splitting problem, which the global order already removes. |
-| **Surplus / redistribution auction over zones** | No retrievable primary source was found during research, so it cannot be implemented honestly. Recorded in `docs/RESEARCH.md` rather than half-built. |
-| **Central coordinator in the API** | Would be centralised coordination presented as decentralised. |
-| **Optimistic entry, retract on conflict** | Undetectable mid-zone conflicts produce exactly the unsafe motion this project exists to prevent. |
-| **Token passing / ring ordering** | Physically correct but brittle to crashes: a dead token-holder freezes the ring. |
-
-## Revisiting condition
-
-Revisit if **either**:
-
-1. Measured acquisition latency (voters × round trip) dominates makespan at the
-   target fleet size. Then consider a two-phase prepare/commit variant, which keeps
-   the global order but overlaps the round trips. It must preserve the
-   no-split-grant property and would need its own interleaving tests.
-2. Maps are authored requiring genuinely overlapping zones. Then the disjointness
-   requirement must be replaced by a complete, enforced conflict set — validated at
-   import **and** at admission, since two different zone ids must never authorise
-   physically conflicting movements.
-
-In both cases the disjointness and single-outstanding-grant invariants are
-non-negotiable. Any variant that weakens them is a different protocol and needs its
-own ADR plus a fresh independent review.
+- **`n` round trips per acquisition.** For the robot at canonical index zero,
+  `n-1`, because its own voter answers in-process.
+- **The fleet serialises per robot.** A robot traversing a zone cannot also hold
+  another, even a disjoint one (invariant 6).
+- **Canonical index zero is a hot spot** for every zone.
+- **A forged request can split a zone**, because a voter cannot see another voter's
+  record. The consequence is fail-stop (nobody can enter), not unsafe motion; see
+  ZONE_PROTOCOL.md §6.3 and the test that asserts it.
+- **Throughput is bounded by the slowest zone.** A zone whose holder fails blocks
+  until an operator fences it.
 
 ## Verification
 
-- `tests/protocol/test_acquisition.py` — happy path, correct rejection reasons
-- `tests/protocol/test_split_grant.py` — split partial acquisition resolves
-- `tests/protocol/test_cancellation.py` — **late grant after durable cancellation**
-- `tests/protocol/test_interleavings.py` — bounded exhaustive message permutations
-- `tests/protocol/test_restart_recovery.py` — durable promise survives reboot
-- `docs/protocol/ZONE_PROTOCOL.md` — full state and transition tables
+| Claim | Where |
+|---|---|
+| split grants impossible | `tests/protocol/test_split_grant.py` |
+| the self voter is step zero of the shared order | `tests/protocol/test_split_grant.py::test_every_walk_starts_at_canonical_index_zero_including_the_self_voter` |
+| 720 orderings preserve both invariants | `tests/protocol/test_interleavings.py` |
+| arbitrary message sequences preserve the safety invariants | `tests/property/test_protocol_state_machine.py` |
+| bounded progress under healthy conditions | `tests/protocol/test_acquisition.py::test_progress_a_queued_requester_eventually_acquires_and_traverses` |
+
+## Notes
+
+- An **ordering cost** was found empirically, not on paper. Every walk starts at
+  index zero, so the robot at index zero reaches the first voter with zero round
+  trips while everybody else needs one. Without a fairness queue it therefore won
+  every race and monopolised the zone; the progress test failed with only one of
+  three robots ever traversing. The fix, and why it is bounded, is ADR 0003 §6.

@@ -428,7 +428,20 @@ class SqliteAuthorityJournal:
         raw = f"{self._robot_id}|{record_type}|{seq}|{self._session_id}|{payload}"
         return hashlib.sha256(raw.encode("utf-8")).hexdigest()[:32]
 
+    @property
+    def in_memory(self) -> bool:
+        """True when this journal lives only in process memory.
+
+        An in-memory journal has no file, so there is no file header to inspect.
+        Treating the absence of a header as corruption would put every agent built
+        on it into stopped/unknown recovery, which is a false negative on a
+        perfectly healthy database.
+        """
+        return str(self._path) in (":memory:", "") or self._path.name.startswith(":memory:")
+
     def _header_ok(self) -> bool:
+        if self.in_memory:
+            return True
         try:
             with self._path.open("rb") as handle:
                 return handle.read(len(_SQLITE_HEADER)) == _SQLITE_HEADER
